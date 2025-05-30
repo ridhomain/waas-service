@@ -1,3 +1,4 @@
+// src/server.ts
 import Fastify from 'fastify';
 import fastifyCors from '@fastify/cors';
 import fastifyHelmet from '@fastify/helmet';
@@ -8,6 +9,7 @@ import natsPlugin from './plugins/nats';
 import authPlugin from './plugins/auth';
 import mongodbPlugin from './plugins/mongodb';
 import agendaPlugin from './plugins/agenda';
+import zodValidationPlugin from './plugins/zod-validation';
 
 // Root Route
 import apiRoutes from './routes/index';
@@ -28,11 +30,12 @@ async function start() {
   });
 
   // Register plugins and routes
-  await fastify.register(envPlugin);
-  await fastify.register(mongodbPlugin);
-  await fastify.register(natsPlugin);
-  await fastify.register(agendaPlugin);
-  await fastify.register(authPlugin);
+  await fastify.register(envPlugin);        // 'env' 
+  await fastify.register(mongodbPlugin);    // depends on 'env'
+  await fastify.register(natsPlugin);       // depends on 'env'
+  await fastify.register(agendaPlugin);     // depends on 'env', 'mongodb'
+  await fastify.register(authPlugin);       // depends on 'env'
+  await fastify.register(zodValidationPlugin); // no dependencies
   await fastify.register(fastifyCors);
   await fastify.register(fastifyHelmet);
   await fastify.register(apiRoutes);

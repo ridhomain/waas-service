@@ -1,7 +1,8 @@
+// src/services/meta.service.ts (updated)
 import axios from "axios";
-import { MetaMessagePayload } from "../types/meta.types";
+import { MetaSendMessageInput } from "../schemas/zod-schemas";
 
-export async function sendToMetaAPI(payload: MetaMessagePayload) {
+export async function sendToMetaAPI(payload: MetaSendMessageInput) {
   const { type, to, message, metaCredentials } = payload;
   const { accessToken, phoneNumberId } = metaCredentials;
 
@@ -34,7 +35,15 @@ export async function sendToMetaAPI(payload: MetaMessagePayload) {
     }
   }
 
-  // (Optional) Add other types here in future
+  if (type === "document") {
+    baseBody.document = {
+      link: message.documentUrl!,
+      filename: message.filename!,
+    };
+    if (message.text) {
+      baseBody.document.caption = message.text;
+    }
+  }
 
   try {
     const response = await axios.post(url, baseBody, { headers });

@@ -1,7 +1,7 @@
-// src/handlers/meta.handler.ts
+// src/handlers/meta.handler.ts (updated version)
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Agenda } from '@hokify/agenda';
-import { MetaMessagePayload } from '../types/meta.types';
+import { MetaSendMessageInput } from '../schemas/zod-schemas';
 import { badRequest, handleError, internalError, unauthorized } from '../utils/errors';
 import { sendSuccess, sendError } from '../utils/response';
 import { sendToMetaAPI } from '../services/meta.service';
@@ -25,7 +25,7 @@ export const createMetaHandlers = (deps: MetaHandlerDeps) => {
   const { agenda, log } = deps;
 
   const sendMessage = async (
-    request: FastifyRequest<{ Body: MetaMessagePayload }>,
+    request: FastifyRequest<{ Body: MetaSendMessageInput }>,
     reply: FastifyReply
   ) => {
     try {
@@ -104,7 +104,7 @@ export const createMetaHandlers = (deps: MetaHandlerDeps) => {
 // Helper function to validate Meta message content
 function validateMetaMessage(
   type: string,
-  message: MetaMessagePayload['message']
+  message: MetaSendMessageInput['message']
 ): string | null {
   switch (type) {
     case 'text':

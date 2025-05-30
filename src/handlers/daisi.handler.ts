@@ -1,12 +1,17 @@
-// src/handlers/daisi.handler.ts
+// src/handlers/daisi.handler.ts (updated with new task utils)
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Agenda } from '@hokify/agenda';
 import { TaskRepository } from '../repositories/task.repository';
 import { createError, forbidden, badRequest, handleError } from '../utils/errors';
 import { sendSuccess, sendError } from '../utils/response';
 import { validateMessageType } from '../utils/validators';
-import { createTaskPayload } from '../utils/task.utils';
-import { DaisiMessagePayload, DaisiGroupMessagePayload, MarkAsReadPayload, LogoutPayload } from '../types/daisi.types';
+import { createDaisiTaskPayload } from '../utils/task.utils';
+import {
+  DaisiSendMessageInput,
+  DaisiSendGroupMessageInput,
+  DaisiMarkAsReadInput,
+  DaisiLogoutInput,
+} from '../schemas/zod-schemas';
 
 export interface DaisiHandlerDeps {
   taskRepository: TaskRepository;
@@ -19,7 +24,7 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
   const { taskRepository, agenda, requestAgentEvent, log } = deps;
 
   const sendMessage = async (
-    request: FastifyRequest<{ Body: DaisiMessagePayload }>,
+    request: FastifyRequest<{ Body: DaisiSendMessageInput }>,
     reply: FastifyReply
   ) => {
     try {
@@ -37,8 +42,8 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
         throw badRequest(validationError, 'INVALID_MESSAGE_TYPE');
       }
 
-      // Create task
-      const taskPayload = createTaskPayload('DAISI', 'send', payload.companyId, payload, 'send-daisi-message');
+      // Create task using the new specific function
+      const taskPayload = createDaisiTaskPayload('send', payload.companyId, payload, 'send-daisi-message');
       const taskId = await taskRepository.create(taskPayload);
 
       // Handle scheduled messages
@@ -99,7 +104,7 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
   };
 
   const sendMessageToGroup = async (
-    request: FastifyRequest<{ Body: DaisiGroupMessagePayload }>,
+    request: FastifyRequest<{ Body: DaisiSendGroupMessageInput }>,
     reply: FastifyReply
   ) => {
     try {
@@ -115,11 +120,8 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
         throw badRequest(validationError, 'INVALID_MESSAGE_TYPE');
       }
 
-      const taskPayload = createTaskPayload('DAISI', 'send', payload.companyId, {
-        ...payload,
-        phoneNumber: payload.groupJid,
-      }, 'send-daisi-message');
-      
+      // Create task using the new specific function (groupJid will be used as phoneNumber)
+      const taskPayload = createDaisiTaskPayload('send', payload.companyId, payload, 'send-daisi-message');
       const taskId = await taskRepository.create(taskPayload);
 
       if (payload.scheduleAt) {
@@ -135,7 +137,7 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
           });
         } else {
           log.warn({ taskId }, 'Agenda job created without ID');
-        };
+        }
 
         return sendSuccess(reply, {
           status: 'scheduled' as const,
@@ -178,7 +180,7 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
   };
 
   const markAsRead = async (
-    request: FastifyRequest<{ Body: MarkAsReadPayload }>,
+    request: FastifyRequest<{ Body: DaisiMarkAsReadInput }>,
     reply: FastifyReply
   ) => {
     try {
@@ -204,7 +206,7 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
   };
 
   const logout = async (
-    request: FastifyRequest<{ Body: LogoutPayload }>,
+    request: FastifyRequest<{ Body: DaisiLogoutInput }>,
     reply: FastifyReply
   ) => {
     try {

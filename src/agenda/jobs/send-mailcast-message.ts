@@ -1,13 +1,13 @@
-// src/agenda/jobs/send-mailcast.message.ts
+// src/agenda/jobs/send-mailcast-message.ts (updated)
 import { Agenda, Job } from "@hokify/agenda";
 import { FastifyInstance } from "fastify";
-import { MailcastMessagePayload } from "../../types/mailcast.types";
+import { MailcastSendMessageInput } from "../../schemas/zod-schemas";
 
 export const defineSendMailcastMessageJob = (
   agenda: Agenda,
   fastify: FastifyInstance
 ) => {
-  agenda.define("send-mailcast-message", async (job: Job<MailcastMessagePayload & { taskId?: string }>) => {
+  agenda.define("send-mailcast-message", async (job: Job<MailcastSendMessageInput & { taskId?: string }>) => {
     const payload = job.attrs.data;
 
     if (!payload) {

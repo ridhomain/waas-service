@@ -1,4 +1,4 @@
-// src/plugins/agenda.ts
+// src/plugins/agenda.ts (fixed dependencies)
 import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import { Agenda, Job } from '@hokify/agenda';
@@ -80,5 +80,5 @@ const agendaPlugin: FastifyPluginAsync = async (fastify) => {
 
 export default fp(agendaPlugin, {
   name: 'agenda',
-  dependencies: ['config', 'mongodb'],
+  dependencies: ['env', 'mongodb'], // Updated dependencies
 });

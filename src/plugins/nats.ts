@@ -1,3 +1,4 @@
+// src/plugins/nats.ts (fixed dependencies)
 import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import { connect, StringCodec, JetStreamClient, JetStreamManager } from 'nats';
@@ -97,4 +98,7 @@ const natsPlugin: FastifyPluginAsync = async (fastify) => {
   });
 };
 
-export default fp(natsPlugin);
+export default fp(natsPlugin, {
+  name: 'nats',
+  dependencies: ['env'], // Added explicit dependency
+});

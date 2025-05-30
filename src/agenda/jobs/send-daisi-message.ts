@@ -1,13 +1,13 @@
-// src/agenda/jobs/send-daisi.message.ts
+// src/agenda/jobs/send-daisi-message.ts
 import { Agenda, Job } from "@hokify/agenda";
 import { FastifyInstance } from "fastify";
-import { DaisiMessagePayload } from "../../types/daisi.types";
+import { DaisiSendMessageInput } from "../../schemas/zod-schemas";
 
 export const defineSendDaisiMessageJob = (
   agenda: Agenda,
   fastify: FastifyInstance
 ) => {
-  agenda.define("send-daisi-message", async (job: Job<DaisiMessagePayload & { taskId?: string }>) => {
+  agenda.define("send-daisi-message", async (job: Job<DaisiSendMessageInput & { taskId?: string }>) => {
     const payload = job.attrs.data;
 
     if (!payload) {

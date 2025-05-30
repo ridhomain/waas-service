@@ -1,7 +1,9 @@
+// src/types/fastify.d.ts (updated)
 import { JetStreamClient, JetStreamManager, NatsConnection } from 'nats';
 import { Agenda } from '@hokify/agenda';
 import { Db } from 'mongodb';
 import { TaskRepository } from '../repositories/task.repository';
+import { ZodSchema } from 'zod';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -32,6 +34,14 @@ declare module 'fastify' {
     
     // Agenda
     agenda: Agenda;
+    
+    // Zod Validation
+    zodValidate: (schemas: {
+      body?: ZodSchema;
+      querystring?: ZodSchema;
+      params?: ZodSchema;
+      headers?: ZodSchema;
+    }) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     
     // Config
     config: {

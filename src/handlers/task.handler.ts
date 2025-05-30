@@ -1,8 +1,8 @@
-// src/handlers/task.handler.ts
+// src/handlers/task.handler.ts (updated version)
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { ObjectId } from 'mongodb';
 import { TaskRepository } from '../repositories/task.repository';
-import { TaskFilterQuery } from '../types/api.types';
+import { TaskFiltersInput, TaskUpdateInput } from '../schemas/zod-schemas';
 import { Task, TaskStatus, TaskChannel, TaskType } from '../models/task';
 import { sendSuccess, sendError, createPaginationMeta } from '../utils/response';
 import { badRequest, notFound, unauthorized, handleError } from '../utils/errors';
@@ -15,7 +15,7 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
   const { taskRepository } = deps;
 
   const listTasks = async (
-    request: FastifyRequest<{ Querystring: TaskFilterQuery }>,
+    request: FastifyRequest<{ Querystring: TaskFiltersInput }>,
     reply: FastifyReply
   ) => {
     try {
@@ -114,7 +114,7 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
   const updateTask = async (
     request: FastifyRequest<{
       Params: { id: string };
-      Body: Partial<Pick<Task, 'status' | 'label'>>;
+      Body: TaskUpdateInput;
     }>,
     reply: FastifyReply
   ) => {
@@ -141,22 +141,14 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
         throw notFound('Task');
       }
 
-      // Validate update payload
+      // Build updates object (Zod validation already ensures valid values)
       const updates: Partial<Task> = {};
       if (payload.status) {
-        const validStatuses: TaskStatus[] = ['PENDING', 'PROCESSING', 'COMPLETED', 'ERROR'];
-        if (!validStatuses.includes(payload.status as TaskStatus)) {
-          throw badRequest('Invalid status value');
-        }
         updates.status = payload.status as TaskStatus;
       }
 
       if (payload.label !== undefined) {
         updates.label = payload.label;
-      }
-
-      if (Object.keys(updates).length === 0) {
-        throw badRequest('No valid fields to update');
       }
 
       const updated = await taskRepository.update(id, updates);

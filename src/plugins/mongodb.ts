@@ -1,4 +1,4 @@
-// src/plugins/mongodb.ts
+// src/plugins/mongodb.ts (fixed dependencies)
 import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import fastifyMongo from '@fastify/mongodb';
@@ -45,5 +45,5 @@ const mongodbPlugin: FastifyPluginAsync = async (fastify) => {
 
 export default fp(mongodbPlugin, {
   name: 'mongodb',
-  dependencies: ['config'],
+  dependencies: ['env'],
 });

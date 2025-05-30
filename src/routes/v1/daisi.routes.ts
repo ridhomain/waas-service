@@ -3,11 +3,11 @@ import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import { createDaisiHandlers } from '../../handlers/daisi.handler';
 import {
-  sendDaisiMessageSchema,
-  sendDaisiMessageToGroupSchema,
-  markAsReadSchema,
-  logoutSchema,
-} from '../../schemas/daisi.schema';
+  DaisiSendMessageSchema,
+  DaisiSendGroupMessageSchema,
+  DaisiMarkAsReadSchema,
+  DaisiLogoutSchema,
+} from '../../schemas/zod-schemas';
 
 const daisiRoutes: FastifyPluginAsync = async (fastify) => {
   const handlers = createDaisiHandlers({
@@ -18,22 +18,22 @@ const daisiRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.post('/daisi/send-message', {
-    schema: sendDaisiMessageSchema,
+    preHandler: [fastify.zodValidate({ body: DaisiSendMessageSchema })],
     handler: handlers.sendMessage,
   });
 
   fastify.post('/daisi/send-message-to-group', {
-    schema: sendDaisiMessageToGroupSchema,
+    preHandler: [fastify.zodValidate({ body: DaisiSendGroupMessageSchema })],
     handler: handlers.sendMessageToGroup,
   });
 
   fastify.post('/daisi/mark-as-read', {
-    schema: markAsReadSchema,
+    preHandler: [fastify.zodValidate({ body: DaisiMarkAsReadSchema })],
     handler: handlers.markAsRead,
   });
 
   fastify.post('/daisi/logout', {
-    schema: logoutSchema,
+    preHandler: [fastify.zodValidate({ body: DaisiLogoutSchema })],
     handler: handlers.logout,
   });
 };

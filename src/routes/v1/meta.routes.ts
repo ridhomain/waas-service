@@ -2,7 +2,7 @@
 import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import { createMetaHandlers } from '../../handlers/meta.handler';
-import { sendMetaMessageSchema } from '../../schemas/meta.schema';
+import { MetaSendMessageSchema } from '../../schemas/zod-schemas';
 
 const metaRoutes: FastifyPluginAsync = async (fastify) => {
   const handlers = createMetaHandlers({
@@ -11,7 +11,7 @@ const metaRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.post('/meta/send-message', {
-    schema: sendMetaMessageSchema,
+    preHandler: [fastify.zodValidate({ body: MetaSendMessageSchema })],
     handler: handlers.sendMessage,
   });
 };

@@ -2,7 +2,7 @@
 import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import { createMailcastHandlers } from '../../handlers/mailcast.handler';
-import { sendMailcastMessageSchema } from '../../schemas/mailcast.schema';
+import { MailcastSendMessageSchema } from '../../schemas/zod-schemas';
 
 const mailcastRoutes: FastifyPluginAsync = async (fastify) => {
   const handlers = createMailcastHandlers({
@@ -13,7 +13,7 @@ const mailcastRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.post('/mailcast/send-message', {
-    schema: sendMailcastMessageSchema,
+    preHandler: [fastify.zodValidate({ body: MailcastSendMessageSchema })],
     handler: handlers.sendMessage,
   });
 };

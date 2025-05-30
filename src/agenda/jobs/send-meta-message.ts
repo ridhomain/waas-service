@@ -1,10 +1,10 @@
-// src/agenda/jobs/send-meta-message.ts
+// src/agenda/jobs/send-meta-message.ts (updated)
 import { Agenda, Job } from "@hokify/agenda";
 import { sendToMetaAPI } from "../../services/meta.service";
-import { MetaMessagePayload } from "../../types/meta.types";
+import { MetaSendMessageInput } from "../../schemas/zod-schemas";
 
 export const defineSendMetaMessageJob = (agenda: Agenda) => {
-  agenda.define("send-meta-message", async (job: Job<MetaMessagePayload>) => {
+  agenda.define("send-meta-message", async (job: Job<MetaSendMessageInput>) => {
     const payload = job.attrs.data;
 
     if (!payload) {

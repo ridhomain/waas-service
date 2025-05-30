@@ -1,12 +1,12 @@
-// src/handlers/mailcast.handler.ts
+// src/handlers/mailcast.handler.ts (updated with new task utils)
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Agenda } from '@hokify/agenda';
 import { TaskRepository } from '../repositories/task.repository';
-import { MailcastMessagePayload } from '../types/mailcast.types';
+import { MailcastSendMessageInput } from '../schemas/zod-schemas';
 import { forbidden, badRequest, handleError, internalError } from '../utils/errors';
 import { sendSuccess, sendError } from '../utils/response';
 import { validateMessageType } from '../utils/validators';
-import { createTaskPayload } from '../utils/task.utils';
+import { createMailcastTaskPayload } from '../utils/task.utils';
 
 export interface MailcastHandlerDeps {
   taskRepository: TaskRepository;
@@ -19,7 +19,7 @@ export const createMailcastHandlers = (deps: MailcastHandlerDeps) => {
   const { taskRepository, agenda, publishEvent, log } = deps;
 
   const sendMessage = async (
-    request: FastifyRequest<{ Body: MailcastMessagePayload }>,
+    request: FastifyRequest<{ Body: MailcastSendMessageInput }>,
     reply: FastifyReply
   ) => {
     try {
@@ -40,9 +40,9 @@ export const createMailcastHandlers = (deps: MailcastHandlerDeps) => {
         throw badRequest(validationError, 'INVALID_MESSAGE_TYPE');
       }
 
-      // Create task
+      // Create task using the new specific function
       const jobName = 'send-mailcast-message';
-      const taskPayload = createTaskPayload('MAILCAST', 'send', companyId, payload, jobName);
+      const taskPayload = createMailcastTaskPayload('send', companyId, payload, jobName);
       const taskId = await taskRepository.create(taskPayload);
 
       // Handle scheduled messages

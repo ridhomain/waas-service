@@ -1,4 +1,4 @@
-// src/plugins/auth.ts
+// src/plugins/auth.ts (fixed dependencies)
 import { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { verifyToken } from '../utils/token';
@@ -44,5 +44,5 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
 
 export default fp(authPlugin, {
   name: 'auth',
-  dependencies: ['config'],
+  dependencies: ['env'], // Updated dependency name
 });
