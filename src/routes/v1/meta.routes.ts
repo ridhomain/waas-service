@@ -7,6 +7,7 @@ import { sendMetaMessageSchema } from '../../schemas/meta.schema';
 const metaRoutes: FastifyPluginAsync = async (fastify) => {
   const handlers = createMetaHandlers({
     agenda: fastify.agenda,
+    log: fastify.log
   });
 
   fastify.post('/meta/send-message', {

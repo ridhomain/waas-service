@@ -54,9 +54,14 @@ export const createMailcastHandlers = (deps: MailcastHandlerDeps) => {
             taskId,
           });
 
-          await taskRepository.update(taskId, {
-            agendaJobId: job.attrs._id.toString(),
-          });
+          const jobId = job.attrs._id;
+          if (jobId) {
+            await taskRepository.update(taskId, {
+              agendaJobId: jobId.toString(),
+            });
+          } else {
+            log.warn({ taskId }, 'Agenda job created without ID');
+          }
 
           log.info({ scheduleAt, taskId, agentId }, '[Mailcast] Message scheduled via Agenda');
 

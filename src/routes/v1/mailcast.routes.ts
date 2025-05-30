@@ -9,6 +9,7 @@ const mailcastRoutes: FastifyPluginAsync = async (fastify) => {
     taskRepository: fastify.taskRepository,
     agenda: fastify.agenda,
     publishEvent: fastify.publishEvent,
+    log: fastify.log
   });
 
   fastify.post('/mailcast/send-message', {

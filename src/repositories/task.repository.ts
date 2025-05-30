@@ -1,17 +1,8 @@
 // src/repositories/task.repository.ts
 import { Db, Collection, ObjectId, Filter } from 'mongodb';
-import { Task, TaskStatus, TaskChannel } from '../models/task';
+import { Task, TaskStatus, TaskFilters } from '../models/task';
 
 export type TaskRepository = ReturnType<typeof createTaskRepository>;
-
-interface TaskFilters {
-  status?: TaskStatus;
-  channel?: TaskChannel;
-  taskType?: string;
-  agentId?: string;
-  label?: string;
-  scheduledBefore?: Date;
-}
 
 interface PaginationOptions {
   limit: number;

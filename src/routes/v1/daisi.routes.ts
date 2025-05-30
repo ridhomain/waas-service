@@ -14,6 +14,7 @@ const daisiRoutes: FastifyPluginAsync = async (fastify) => {
     taskRepository: fastify.taskRepository,
     agenda: fastify.agenda,
     requestAgentEvent: fastify.requestAgentEvent,
+    log: fastify.log
   });
 
   fastify.post('/daisi/send-message', {

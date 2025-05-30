@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto';
-import { AnyMessageContent } from 'baileys';
 
 export const nanoid = (n = 10) => {
   return randomUUID().replace(/-/g, '').substring(0, n);

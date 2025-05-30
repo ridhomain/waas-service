@@ -1,3 +1,4 @@
+// src/agenda/jobs/send-mailcast.message.ts
 import { Agenda, Job } from "@hokify/agenda";
 import { FastifyInstance } from "fastify";
 import { MailcastMessagePayload } from "../../types/mailcast.types";
@@ -10,8 +11,7 @@ export const defineSendMailcastMessageJob = (
     const payload = job.attrs.data;
 
     if (!payload) {
-      job.fail("Missing payload");
-      return;
+      throw new Error("Missing payload");
     }
 
     const { agentId, taskId } = payload;
@@ -19,26 +19,34 @@ export const defineSendMailcastMessageJob = (
 
     try {
       if (taskId) {
-        await fastify.taskService.update(taskId, {
+        await fastify.taskRepository.update(taskId, {
           status: "PROCESSING",
         });
       }
 
+      // Publish to NATS JetStream
       await fastify.publishEvent(subject, payload);
+      
+      // Store status in job attributes
       (job.attrs as any).result = { status: "published" };
 
+      // Note: We don't update task to COMPLETED here
+      // The WA Events Processor will handle that when it actually sends the message
+
+      fastify.log.info({ subject, taskId, agentId }, "[Agenda] Mailcast message published to JetStream");
+
     } catch (err) {
-      console.error("[Agenda] Failed to publish mailcast message", err);
+      fastify.log.error({ err, agentId, taskId }, "[Agenda] Failed to publish mailcast message");
 
       if (taskId) {
-        await fastify.taskService.update(taskId, {
+        await fastify.taskRepository.update(taskId, {
           status: "ERROR",
-          errorReason: (err as Error)?.message || "Unhandled failure",
-          finishedAt: new Date().toISOString(),
+          errorReason: err instanceof Error ? err.message : "Failed to publish to NATS",
+          finishedAt: new Date(),
         });
       }
 
-      job.fail(err as Error);
+      throw err; // Re-throw to mark job as failed
     }
   });
 };

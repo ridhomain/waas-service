@@ -35,3 +35,12 @@ export interface Task {
 export interface TaskResponse extends Omit<Task, '_id'> {
   id: string;
 }
+
+export interface TaskFilters {
+  status?: TaskStatus;
+  channel?: TaskChannel;
+  taskType?: TaskType;  // Use the specific type instead of string
+  agentId?: string;
+  label?: string;
+  scheduledBefore?: Date;
+}

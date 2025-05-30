@@ -12,10 +12,11 @@ export interface DaisiHandlerDeps {
   taskRepository: TaskRepository;
   agenda: Agenda;
   requestAgentEvent: (action: string, subject: string, payload: any) => Promise<any>;
+  log: any; // Fastify logger
 }
 
 export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
-  const { taskRepository, agenda, requestAgentEvent } = deps;
+  const { taskRepository, agenda, requestAgentEvent, log } = deps;
 
   const sendMessage = async (
     request: FastifyRequest<{ Body: DaisiMessagePayload }>,
@@ -47,9 +48,14 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
           taskId,
         });
 
-        await taskRepository.update(taskId, {
-          agendaJobId: job.attrs._id.toString(),
-        });
+        const jobId = job.attrs._id;
+        if (jobId) {
+          await taskRepository.update(taskId, {
+            agendaJobId: jobId.toString(),
+          });
+        } else {
+          log.warn({ taskId }, 'Agenda job created without ID');
+        }
 
         return sendSuccess(reply, {
           status: 'scheduled' as const,
@@ -122,9 +128,14 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
           taskId,
         });
 
-        await taskRepository.update(taskId, {
-          agendaJobId: job.attrs._id.toString(),
-        });
+        const jobId = job.attrs._id;
+        if (jobId) {
+          await taskRepository.update(taskId, {
+            agendaJobId: jobId.toString(),
+          });
+        } else {
+          log.warn({ taskId }, 'Agenda job created without ID');
+        };
 
         return sendSuccess(reply, {
           status: 'scheduled' as const,

@@ -3,7 +3,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { ObjectId } from 'mongodb';
 import { TaskRepository } from '../repositories/task.repository';
 import { TaskFilterQuery } from '../types/api.types';
-import { Task, TaskStatus, TaskChannel } from '../models/task';
+import { Task, TaskStatus, TaskChannel, TaskType } from '../models/task';
 import { sendSuccess, sendError, createPaginationMeta } from '../utils/response';
 import { badRequest, notFound, unauthorized, handleError } from '../utils/errors';
 
@@ -42,7 +42,7 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
       const filters = {
         status: status as TaskStatus,
         channel: channel as TaskChannel,
-        taskType: type,
+        taskType: type as TaskType,
         label,
         agentId,
         scheduledBefore: scheduledBefore ? new Date(scheduledBefore) : undefined,

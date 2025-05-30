@@ -5,6 +5,16 @@ import { MetaMessagePayload } from '../types/meta.types';
 import { badRequest, handleError, internalError, unauthorized } from '../utils/errors';
 import { sendSuccess, sendError } from '../utils/response';
 import { sendToMetaAPI } from '../services/meta.service';
+import { AxiosError } from 'axios';
+import { nanoid } from '../utils';
+
+interface MetaAPIError {
+  error?: {
+    message?: string;
+    type?: string;
+    code?: number;
+  };
+}
 
 export interface MetaHandlerDeps {
   agenda: Agenda;
@@ -43,14 +53,14 @@ export const createMetaHandlers = (deps: MetaHandlerDeps) => {
 
           log.info({ 
             scheduleAt, 
-            jobId: job.attrs._id.toString(),
+            jobId: nanoid(),
             to: payload.to 
           }, '[Meta] Message scheduled');
 
           return sendSuccess(reply, {
             status: 'scheduled' as const,
             scheduleAt,
-            jobId: job.attrs._id.toString(),
+            jobId: nanoid(),
           });
         } catch (err) {
           log.error({ err, scheduleAt }, '[Meta] Failed to schedule message');
@@ -135,16 +145,28 @@ function isValidUrl(url: string): boolean {
 }
 
 // Helper function to extract error message from Meta API errors
-function extractMetaErrorMessage(error: any): string {
-  if (error instanceof Error) {
-    // Check if it's an error from axios with response data
-    if ('response' in error && error.response?.data) {
-      const data = error.response.data;
-      if (data.error?.message) {
-        return `Meta API Error: ${data.error.message}`;
-      }
+function extractMetaErrorMessage(error: unknown): string {
+  // Check if it's an Axios error with response
+  if (error && typeof error === 'object' && 'isAxiosError' in error) {
+    const axiosError = error as AxiosError<MetaAPIError>;
+    
+    if (axiosError.response?.data?.error?.message) {
+      return `Meta API Error: ${axiosError.response.data.error.message}`;
     }
+    
+    if (axiosError.response?.statusText) {
+      return `Meta API Error: ${axiosError.response.status} ${axiosError.response.statusText}`;
+    }
+    
+    if (axiosError.message) {
+      return `Meta API Request Failed: ${axiosError.message}`;
+    }
+  }
+  
+  // Check if it's a regular Error
+  if (error instanceof Error) {
     return error.message;
   }
+  
   return 'Meta API request failed';
 }
