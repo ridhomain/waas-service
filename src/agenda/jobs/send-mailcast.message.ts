@@ -1,6 +1,6 @@
 import { Agenda, Job } from "@hokify/agenda";
 import { FastifyInstance } from "fastify";
-import { MailcastMessagePayload } from "../../types/mailcast";
+import { MailcastMessagePayload } from "../../types/mailcast.types";
 
 export const defineSendMailcastMessageJob = (
   agenda: Agenda,

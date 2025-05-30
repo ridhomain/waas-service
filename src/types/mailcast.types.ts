@@ -1,12 +1,10 @@
-import { AnyMessageContent } from "baileys";
-
-export type MailcastMessageType = "text" | "image" | "document";
+import { AnyMessageContent } from 'baileys';
 
 export interface MailcastMessagePayload {
   companyId: string;
   agentId: string;
-  type: string;
   phoneNumber: string;
+  type: 'text' | 'image' | 'document';
   message: AnyMessageContent;
   scheduleAt?: string;
 }

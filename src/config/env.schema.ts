@@ -1,14 +1,11 @@
-export const envSchema = {
-  type: 'object',
-  required: [
-    'NATS_URL',
-    'MONGODB_DSN',
-    'SECRET_KEY',
-  ],
-  properties: {
-    PORT: { type: 'number', default: 80 },
-    NATS_URL: { type: 'string', default: 'nats://localhost:4222' },
-    MONGODB_DSN: { type: 'string', default: '' },
-    SECRET_KEY: { type: 'string', default: '' },
-  },
-} as const;
+import { z } from 'zod';
+
+export const envSchema = z.object({
+  PORT: z.number().default(80),
+  NATS_URL: z.string().default('nats://localhost:4222'),
+  MONGODB_DSN: z.string(),
+  SECRET_KEY: z.string(),
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+});
+
+export type EnvConfig = z.infer<typeof envSchema>;

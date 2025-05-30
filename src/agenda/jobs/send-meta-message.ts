@@ -1,6 +1,6 @@
 import { Agenda, Job } from "@hokify/agenda";
 import { sendToMetaAPI } from "../../services/meta.service";
-import { MetaMessagePayload } from "../../types/meta";
+import { MetaMessagePayload } from "../../types/meta.types";
 
 export const defineSendMetaMessageJob = (agenda: Agenda) => {
   agenda.define("send-meta-message", async (job: Job<MetaMessagePayload>) => {

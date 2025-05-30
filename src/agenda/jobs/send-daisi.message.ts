@@ -1,6 +1,6 @@
 import { Agenda, Job } from "@hokify/agenda";
 import { FastifyInstance } from "fastify";
-import { DaisiMessagePayload } from "../../types/daisi";
+import { DaisiMessagePayload } from "../../types/daisi.types";
 // import { TaskStatus } from "../../models/task";
 
 export const defineSendDaisiMessageJob = (

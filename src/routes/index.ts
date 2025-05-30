@@ -1,13 +1,14 @@
+// src/routes/index.ts
 import { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 
-// import broadcastRoutes from './v1/broadcast-routes.js';
-// import workerRoutes from './v1/worker-routes.js';
-import healthRoutes from './v1/health-routes';
-import metaRoutes from './v1/meta-routes';
-import daisiRoutes from './v1/daisi-routes';
-import mailcastRoutes from './v1/mailcast-routes';
-import taskRoutes from './v1/task-routes';
+import healthRoutes from './v1/health.routes';
+import metaRoutes from './v1/meta.routes';
+import daisiRoutes from './v1/daisi.routes';
+import mailcastRoutes from './v1/mailcast.routes';
+import taskRoutes from './v1/task.routes';
+// Broadcast routes commented out for later implementation
+// import broadcastRoutes from './v1/broadcast.routes';
 
 const apiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
   // Public routes
@@ -16,11 +17,15 @@ const apiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
   // Authenticated routes
   await fastify.register(
     async (fastify: FastifyInstance) => {
+      // Add authentication hook
       fastify.addHook('preHandler', fastify.authenticate);
-      fastify.register(metaRoutes);
-      fastify.register(daisiRoutes);
-      fastify.register(mailcastRoutes);
-      fastify.register(taskRoutes);
+      
+      // Register routes
+      await fastify.register(metaRoutes);
+      await fastify.register(daisiRoutes);
+      await fastify.register(mailcastRoutes);
+      await fastify.register(taskRoutes);
+      // await fastify.register(broadcastRoutes); // For later
     },
     { prefix: '/api/v1' }
   );

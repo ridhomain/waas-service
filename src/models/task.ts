@@ -1,3 +1,6 @@
+// src/models/task.ts
+import { ObjectId } from 'mongodb';
+
 export type TaskStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'ERROR';
 
 export type TaskType = 'send' | 'broadcast';
@@ -5,7 +8,7 @@ export type TaskType = 'send' | 'broadcast';
 export type TaskChannel = 'DAISI' | 'MAILCAST' | 'META';
 
 export interface Task {
-  _id?: string;
+  _id?: ObjectId;
   companyId: string;
   agentId: string;
   messageId?: string;
@@ -25,5 +28,10 @@ export interface Task {
   scheduledAt?: Date | null;
   finishedAt?: Date | null;
   createdAt: Date;
-  updatedAt?: Date;
+  updatedAt: Date;
+}
+
+// Helper type for API responses (with string id)
+export interface TaskResponse extends Omit<Task, '_id'> {
+  id: string;
 }

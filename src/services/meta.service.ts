@@ -1,5 +1,5 @@
 import axios from "axios";
-import { MetaMessagePayload } from "../types/meta";
+import { MetaMessagePayload } from "../types/meta.types";
 
 export async function sendToMetaAPI(payload: MetaMessagePayload) {
   const { type, to, message, metaCredentials } = payload;
