@@ -48,8 +48,10 @@ declare module 'fastify' {
       PORT: number;
       NATS_URL: string;
       MONGODB_DSN: string;
+      POSTGRES_DSN: string;
       SECRET_KEY: string;
       NODE_ENV?: string;
+      POST
     };
   }
 }

@@ -112,6 +112,45 @@ export const TaskUpdateSchema = z.object({
   message: 'At least one field must be provided for update',
 });
 
+// Broadcast schemas
+const BaseBroadcastSchema = z.object({
+  companyId: CompanyIdSchema,
+  agentId: AgentIdSchema,
+  type: z.enum(['text', 'image', 'document']),
+  message: BaileysMessageSchema,
+  options: z.record(z.any()).optional(),
+  variables: z.record(z.any()).optional(),
+  userId: z.string().optional(),
+  label: z.string().optional(),
+});
+
+export const BroadcastByTagsSchema = BaseBroadcastSchema.extend({
+  tags: z.string().min(1, 'Tags are required'),
+  schedule: DateTimeSchema.optional(),
+});
+
+export const BroadcastByPhonesSchema = BaseBroadcastSchema.extend({
+  phones: z.string().min(1, 'Phone numbers are required'),
+  schedule: DateTimeSchema.optional(),
+});
+
+export const BroadcastPreviewSchema = z.object({
+  companyId: CompanyIdSchema,
+  agentId: AgentIdSchema,
+  tags: z.string().optional(),
+  phones: z.string().optional(),
+}).refine(data => data.tags || data.phones, {
+  message: 'Either tags or phones must be provided',
+});
+
+export const BroadcastStatusSchema = z.object({
+  batchId: z.string().min(1, 'Batch ID is required'),
+});
+
+export const CancelBroadcastSchema = z.object({
+  batchId: z.string().min(1, 'Batch ID is required'),
+});
+
 // Type exports
 export type DaisiSendMessageInput = z.infer<typeof DaisiSendMessageSchema>;
 export type DaisiSendGroupMessageInput = z.infer<typeof DaisiSendGroupMessageSchema>;
@@ -121,3 +160,8 @@ export type MailcastSendMessageInput = z.infer<typeof MailcastSendMessageSchema>
 export type MetaSendMessageInput = z.infer<typeof MetaSendMessageSchema>;
 export type TaskFiltersInput = z.infer<typeof TaskFiltersSchema>;
 export type TaskUpdateInput = z.infer<typeof TaskUpdateSchema>;
+export type BroadcastByTagsInput = z.infer<typeof BroadcastByTagsSchema>;
+export type BroadcastByPhonesInput = z.infer<typeof BroadcastByPhonesSchema>;
+export type BroadcastPreviewInput = z.infer<typeof BroadcastPreviewSchema>;
+export type BroadcastStatusInput = z.infer<typeof BroadcastStatusSchema>;
+export type CancelBroadcastInput = z.infer<typeof CancelBroadcastSchema>;
