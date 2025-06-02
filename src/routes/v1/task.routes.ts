@@ -9,11 +9,19 @@ const TaskParamsSchema = z.object({
   id: z.string().min(1, 'Task ID is required'),
 });
 
+const TaskTypeQuerySchema = z.object({
+  agentId: z.string().optional(),
+  taskAgent: z.enum(['DAISI', 'META']).optional(),
+  limit: z.number().int().min(1).max(100).default(20),
+  skip: z.number().int().min(0).default(0),
+});
+
 const taskRoutes: FastifyPluginAsync = async (fastify) => {
   const handlers = createTaskHandlers({
     taskRepository: fastify.taskRepository,
   });
 
+  // General task management
   // GET /tasks - List tasks with filters
   fastify.get('/tasks', {
     preHandler: [fastify.zodValidate({ querystring: TaskFiltersSchema })],
@@ -35,6 +43,30 @@ const taskRoutes: FastifyPluginAsync = async (fastify) => {
       })
     ],
     handler: handlers.updateTask,
+  });
+
+  // Task type-specific endpoints
+  // GET /tasks/chat - Get chat tasks (taskType: 'chat')
+  fastify.get('/tasks/chat', {
+    preHandler: [fastify.zodValidate({ querystring: TaskTypeQuerySchema })],
+    handler: handlers.getChatTasks,
+  });
+
+  // GET /tasks/broadcast - Get broadcast tasks (taskType: 'broadcast')
+  fastify.get('/tasks/broadcast', {
+    preHandler: [fastify.zodValidate({ querystring: TaskTypeQuerySchema })],
+    handler: handlers.getBroadcastTasks,
+  });
+
+  // GET /tasks/mailcast - Get mailcast tasks (taskType: 'mailcast')
+  fastify.get('/tasks/mailcast', {
+    preHandler: [fastify.zodValidate({ querystring: TaskTypeQuerySchema })],
+    handler: handlers.getMailcastTasks,
+  });
+
+  // GET /tasks/stats - Get task statistics
+  fastify.get('/tasks/stats', {
+    handler: handlers.getTaskStats,
   });
 };
 

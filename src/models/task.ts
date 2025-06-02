@@ -3,9 +3,11 @@ import { ObjectId } from 'mongodb';
 
 export type TaskStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'ERROR';
 
-export type TaskType = 'send' | 'broadcast';
+// Updated: TaskType now represents the message flow/origin
+export type TaskType = 'chat' | 'broadcast' | 'mailcast';
 
-export type TaskChannel = 'DAISI' | 'MAILCAST' | 'META';
+// Updated: TaskAgent represents which agent/system sends the message
+export type TaskAgent = 'DAISI' | 'META';
 
 export interface Task {
   _id?: ObjectId;
@@ -18,8 +20,8 @@ export interface Task {
   variables?: Record<string, any>;
   userId?: string;
   label?: string;
-  channel: TaskChannel;
   taskType: TaskType;
+  taskAgent: TaskAgent;
   status: TaskStatus;
   errorReason?: string;
   jobName?: string;
@@ -38,8 +40,8 @@ export interface TaskResponse extends Omit<Task, '_id'> {
 
 export interface TaskFilters {
   status?: TaskStatus;
-  channel?: TaskChannel;
-  taskType?: TaskType;  // Use the specific type instead of string
+  taskType?: TaskType;    // Updated from 'channel' to 'taskType'
+  taskAgent?: TaskAgent;  // Updated from 'channel' to 'taskAgent'
   agentId?: string;
   label?: string;
   scheduledBefore?: Date;

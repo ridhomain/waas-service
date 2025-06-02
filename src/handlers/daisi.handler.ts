@@ -1,11 +1,11 @@
-// src/handlers/daisi.handler.ts (updated with new task utils)
+// src/handlers/daisi.handler.ts
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Agenda } from '@hokify/agenda';
 import { TaskRepository } from '../repositories/task.repository';
 import { createError, forbidden, badRequest, handleError } from '../utils/errors';
 import { sendSuccess, sendError } from '../utils/response';
 import { validateMessageType } from '../utils/validators';
-import { createDaisiTaskPayload } from '../utils/task.utils';
+import { createDaisiChatTaskPayload } from '../utils/task.utils';
 import {
   DaisiSendMessageInput,
   DaisiSendGroupMessageInput,
@@ -42,8 +42,8 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
         throw badRequest(validationError, 'INVALID_MESSAGE_TYPE');
       }
 
-      // Create task using the new specific function
-      const taskPayload = createDaisiTaskPayload('send', payload.companyId, payload, 'send-daisi-message');
+      // Create task using the new specific function (taskType: 'chat', taskAgent: 'DAISI')
+      const taskPayload = createDaisiChatTaskPayload(payload.companyId, payload, 'send-daisi-message');
       const taskId = await taskRepository.create(taskPayload);
 
       // Handle scheduled messages
@@ -120,8 +120,8 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
         throw badRequest(validationError, 'INVALID_MESSAGE_TYPE');
       }
 
-      // Create task using the new specific function (groupJid will be used as phoneNumber)
-      const taskPayload = createDaisiTaskPayload('send', payload.companyId, payload, 'send-daisi-message');
+      // Create task using the new specific function (taskType: 'chat', taskAgent: 'DAISI')
+      const taskPayload = createDaisiChatTaskPayload(payload.companyId, payload, 'send-daisi-message');
       const taskId = await taskRepository.create(taskPayload);
 
       if (payload.scheduleAt) {

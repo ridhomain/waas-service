@@ -1,4 +1,4 @@
-// src/handlers/broadcast.handler.ts
+// src/handlers/broadcast.handler.ts (updated to use new task types)
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Agenda } from '@hokify/agenda';
 import { TaskRepository } from '../repositories/task.repository';
@@ -7,6 +7,7 @@ import { nanoid } from '../utils';
 import { forbidden, badRequest, handleError, conflict } from '../utils/errors';
 import { sendSuccess, sendError } from '../utils/response';
 import { validateMessageType } from '../utils/validators';
+import { createDaisiBroadcastTaskPayload } from '../utils/task.utils';
 import {
   BroadcastByTagsInput,
   BroadcastByPhonesInput,
@@ -14,7 +15,8 @@ import {
   CancelBroadcastInput,
   BroadcastStatusInput,
 } from '../schemas/zod-schemas';
-import { JetStreamClient, StringCodec } from 'nats';
+import { JetStreamClient, StringCodec, headers } from 'nats';
+import { TaskAgent } from '../models/task';
 
 export interface BroadcastHandlerDeps {
   taskRepository: TaskRepository;
@@ -33,6 +35,7 @@ interface BroadcastMeta {
   tags?: string[];
   phones?: string[];
   channel: 'broadcast-by-tags' | 'broadcast-by-phones';
+  taskAgent: TaskAgent;  // Added to track which agent system is used
   template?: {
     id?: string;
     name?: string;
@@ -86,6 +89,9 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
       // Extract variables from message if template-like
       const templateVariables = extractVariableNames(message);
 
+      // Determine task agent (DAISI by default, could be configured per agent/company)
+      const taskAgent: TaskAgent = 'DAISI'; // TODO: Make this configurable
+
       // Store broadcast metadata
       const broadcastMeta: BroadcastMeta = {
         createdBy: userId,
@@ -94,30 +100,26 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         totalRecipients: contacts.length,
         tags: tags.split(',').map(t => t.trim()),
         channel: 'broadcast-by-tags',
+        taskAgent,
         template: templateVariables.length > 0 ? {
           variables: templateVariables
         } : undefined,
       };
 
-      // Create tasks in MongoDB
-      const tasksToCreate = contacts.map((contact, idx) => ({
-        companyId: userCompany,
-        agentId,
-        phoneNumber: contact.phone_number,
-        message,
-        options: options || {},
-        variables: variables || {},
-        userId,
-        label,
-        channel: 'MAILCAST' as const,
-        taskType: 'broadcast' as const,
-        status: 'PENDING' as const,
-        batchId,
-        scheduledAt,
-        jobName: 'broadcast-task',
-        // Store metadata in first task only
-        ...(idx === 0 ? { broadcastMeta } : {}),
-      }));
+      // Create tasks in MongoDB using new task structure
+      const tasksToCreate = contacts.map((contact, idx) => 
+        createDaisiBroadcastTaskPayload(userCompany, {
+          agentId,
+          phoneNumber: contact.phone_number,
+          message,
+          options: options || {},
+          variables: variables || {},
+          userId,
+          label,
+          scheduledAt,
+          batchId,
+        }, 'broadcast-task')
+      );
 
       const taskIds = await taskRepository.createMany(tasksToCreate);
 
@@ -128,16 +130,22 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         batchId,
         agentId,
         companyId: userCompany,
+        taskAgent,
         total: contacts.length,
         processed: 0,
         completed: 0,
         failed: 0,
         createdAt: new Date(),
         scheduledAt,
-      })), { ttl: 7 * 24 * 60 * 60 * 1000 }); // 7 days TTL
+      }))); // 7 days TTL
 
       // Publish all tasks to stream
       const subject = `v1.broadcasts.${agentId}`;
+      const h = headers();
+      h.append('Batch-Id', batchId);
+      h.append('Agent-Id', agentId);
+      h.append('Company', userCompany);
+
       for (let i = 0; i < taskIds.length; i++) {
         await js.publish(subject, sc.encode(JSON.stringify({
           taskId: taskIds[i],
@@ -147,6 +155,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
           options: options || {},
           variables: variables || {},
           label,
+          taskAgent,
           // Add contact data for personalization
           contact: {
             name: contacts[i].custom_name || contacts[i].phone_number,
@@ -154,12 +163,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
             // Add more fields as needed for variables
           }
         })), {
-          headers: {
-            'Nats-Msg-Batch-Id': batchId,
-            'Nats-Msg-Agent-Id': agentId,
-            'Nats-Msg-Company': userCompany,
-            'Nats-Msg-Schedule-At': scheduledAt.toISOString(),
-          }
+          headers: h
         });
       }
 
@@ -168,13 +172,14 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         batchId,
         companyId: userCompany,
         agentId,
+        taskAgent,
         total: contacts.length,
       };
 
       if (schedule) {
         const job = await agenda.schedule(schedule, 'signal-broadcast-start', jobData);
 
-        log.info({ batchId, schedule, total: contacts.length }, '[Broadcast] Scheduled broadcast');
+        log.info({ batchId, schedule, total: contacts.length, taskAgent }, '[Broadcast] Scheduled broadcast');
 
         return sendSuccess(reply, {
           status: 'scheduled' as const,
@@ -182,18 +187,20 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
           total: contacts.length,
           scheduleAt: schedule,
           jobId: job.attrs._id?.toString(),
+          taskAgent,
         }, 201);
       }
 
       // Start immediately
       await agenda.now('signal-broadcast-start', jobData);
 
-      log.info({ batchId, total: contacts.length }, '[Broadcast] Started broadcast');
+      log.info({ batchId, total: contacts.length, taskAgent }, '[Broadcast] Started broadcast');
 
       return sendSuccess(reply, {
         status: 'started' as const,
         batchId,
         total: contacts.length,
+        taskAgent,
       }, 201);
     } catch (error) {
       const appError = handleError(error);
@@ -228,8 +235,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
 
       // Process phone numbers (exclude groups)
       const phoneList = phones.split(',')
-        .map(p => normalizePhone(p.trim()))
-        .filter(p => p && p.length >= 10 && !p.includes('@g.us'));
+        .map(p => (p.trim()))
 
       const uniquePhones = [...new Set(phoneList)];
 
@@ -240,6 +246,9 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
       // Extract template variables
       const templateVariables = extractVariableNames(message);
 
+      // Determine task agent (DAISI by default, could be configured per agent/company)
+      const taskAgent: TaskAgent = 'DAISI'; // TODO: Make this configurable
+
       // Store broadcast metadata
       const broadcastMeta: BroadcastMeta = {
         createdBy: userId,
@@ -248,29 +257,26 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         totalRecipients: uniquePhones.length,
         phones: uniquePhones.slice(0, 10), // Store sample
         channel: 'broadcast-by-phones',
+        taskAgent,
         template: templateVariables.length > 0 ? {
           variables: templateVariables
         } : undefined,
       };
 
-      // Create tasks
-      const tasksToCreate = uniquePhones.map((phone, idx) => ({
-        companyId: userCompany,
-        agentId,
-        phoneNumber: phone,
-        message,
-        options: options || {},
-        variables: variables || {},
-        userId,
-        label,
-        channel: 'MAILCAST' as const,
-        taskType: 'broadcast' as const,
-        status: 'PENDING' as const,
-        batchId,
-        scheduledAt,
-        jobName: 'broadcast-task',
-        ...(idx === 0 ? { broadcastMeta } : {}),
-      }));
+      // Create tasks using new task structure
+      const tasksToCreate = uniquePhones.map((phone, idx) =>
+        createDaisiBroadcastTaskPayload(userCompany, {
+          agentId,
+          phoneNumber: phone,
+          message,
+          options: options || {},
+          variables: variables || {},
+          userId,
+          label,
+          scheduledAt,
+          batchId,
+        }, 'broadcast-task')
+      );
 
       const taskIds = await taskRepository.createMany(tasksToCreate);
 
@@ -281,16 +287,22 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         batchId,
         agentId,
         companyId: userCompany,
+        taskAgent,
         total: uniquePhones.length,
         processed: 0,
         completed: 0,
         failed: 0,
         createdAt: new Date(),
         scheduledAt,
-      })), { ttl: 7 * 24 * 60 * 60 * 1000 });
+      })));
 
       // Publish tasks to stream
       const subject = `v1.broadcasts.${agentId}`;
+      const h = headers();
+      h.append('Batch-Id', batchId);
+      h.append('Agent-Id', agentId);
+      h.append('Company', userCompany);
+
       for (let i = 0; i < taskIds.length; i++) {
         await js.publish(subject, sc.encode(JSON.stringify({
           taskId: taskIds[i],
@@ -300,17 +312,13 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
           options: options || {},
           variables: variables || {},
           label,
+          taskAgent,
           contact: {
             phone: uniquePhones[i],
             // Limited data for phone-based broadcasts
           }
         })), {
-          headers: {
-            'Nats-Msg-Batch-Id': batchId,
-            'Nats-Msg-Agent-Id': agentId,
-            'Nats-Msg-Company': userCompany,
-            'Nats-Msg-Schedule-At': scheduledAt.toISOString(),
-          }
+          headers: h
         });
       }
 
@@ -319,6 +327,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         batchId,
         companyId: userCompany,
         agentId,
+        taskAgent,
         total: uniquePhones.length,
       };
 
@@ -331,6 +340,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
           total: uniquePhones.length,
           scheduleAt: schedule,
           jobId: job.attrs._id?.toString(),
+          taskAgent,
         }, 201);
       }
 
@@ -340,6 +350,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         status: 'started' as const,
         batchId,
         total: uniquePhones.length,
+        taskAgent,
       }, 201);
     } catch (error) {
       const appError = handleError(error);
@@ -376,8 +387,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         }));
       } else if (phones) {
         const phoneList = phones.split(',')
-          .map(p => normalizePhone(p.trim()))
-          .filter(p => p && p.length >= 10 && !p.includes('@g.us'));
+          .map(p => p.trim())
         const uniquePhones = [...new Set(phoneList)];
         contactCount = uniquePhones.length;
         sampleContacts = uniquePhones.slice(0, 5).map(p => ({ phone: p }));
@@ -395,7 +405,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         canSchedule: activeBroadcasts.length < 3,
         limits: {
           maxActiveBroadcasts: 3,
-          minScheduleGap: '12 hours'
+          minScheduleGap: '1 week'
         }
       });
     } catch (error) {
@@ -451,6 +461,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         status: 'UNKNOWN',
         startedAt: null,
         completedAt: null,
+        taskAgent: 'DAISI' as TaskAgent,
       };
 
       if (state?.value) {
@@ -469,6 +480,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         agentId: firstTask.agentId,
         label: firstTask.label,
         status: broadcastState.status,
+        taskAgent: firstTask.taskAgent,
         scheduledAt: firstTask.scheduledAt,
         startedAt: broadcastState.startedAt,
         completedAt: broadcastState.completedAt,
@@ -504,6 +516,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
       }
 
       const agentId = tasks[0].agentId;
+      const taskAgent = tasks[0].taskAgent;
 
       // Update KV state
       const kv = await js.views.kv(`broadcast_state`);
@@ -514,7 +527,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         const state = JSON.parse(sc.decode(currentState.value));
         state.status = 'CANCELLED';
         state.cancelledAt = new Date();
-        await kv.put(stateKey, sc.encode(JSON.stringify(state)), { ttl: 7 * 24 * 60 * 60 * 1000 });
+        await kv.put(stateKey, sc.encode(JSON.stringify(state)));
       }
 
       // Cancel scheduled jobs
@@ -540,14 +553,16 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
       await publishEvent(`v1.broadcast.control.${agentId}`, {
         action: 'CANCEL_BROADCAST',
         batchId,
+        taskAgent,
       });
 
-      log.info({ batchId, cancelCount, updatedCount }, '[Broadcast] Cancelled broadcast');
+      log.info({ batchId, cancelCount, updatedCount, taskAgent }, '[Broadcast] Cancelled broadcast');
 
       return sendSuccess(reply, {
         batchId,
         jobsCancelled: cancelCount,
         tasksUpdated: updatedCount,
+        taskAgent,
       });
     } catch (error) {
       const appError = handleError(error);
@@ -574,7 +589,7 @@ async function getContactsByTags(params: {
   const { pgPool, companySchema, agentId, tags } = params;
   
   // Build tag query with JSONB operators
-  const tagConditions = tags.map((_, idx) => `tags @> $${idx + 2}::jsonb`).join(' OR ');
+  const tagConditions = tags.map((_, idx) => `tags @> ${idx + 2}::jsonb`).join(' OR ');
   
   const query = `
     SELECT DISTINCT phone_number, custom_name
@@ -593,24 +608,6 @@ async function getContactsByTags(params: {
   return result.rows;
 }
 
-function normalizePhone(phone: string): string {
-  // Remove all non-digits
-  let normalized = phone.replace(/\D/g, '');
-  
-  // Handle Indonesian numbers
-  if (normalized.startsWith('0')) {
-    normalized = '62' + normalized.slice(1);
-  }
-  
-  // Additional normalization as needed
-  if (normalized.startsWith('62') && normalized.length === 11) {
-    // Fix common issue with missing digit
-    normalized = '62' + normalized.slice(2);
-  }
-  
-  return normalized;
-}
-
 async function validateBroadcastSchedule(
   taskRepository: TaskRepository,
   agentId: string,
@@ -619,15 +616,15 @@ async function validateBroadcastSchedule(
   // Check for broadcasts scheduled within 12 hours
   const nearbyBroadcasts = await taskRepository.findByCompany('', {
     agentId,
-    taskType: 'broadcast',
+    taskType: 'broadcast',  // Updated from taskType field
     status: 'PENDING',
-    scheduledBefore: new Date(scheduleDate.getTime() + 12 * 60 * 60 * 1000),
-  }, { limit: 10 });
+    scheduledBefore: new Date(scheduleDate.getTime() + 7* 24 * 60 * 60 * 1000),
+  }, { limit: 10, skip: 0 });
 
   const conflictingBroadcasts = nearbyBroadcasts.filter(task => {
     if (!task.scheduledAt) return false;
     const timeDiff = Math.abs(task.scheduledAt.getTime() - scheduleDate.getTime());
-    return timeDiff <= 12 * 60 * 60 * 1000; // 12 hours
+    return timeDiff <= 7* 24 * 60 * 60 * 1000; // 7 days
   });
 
   if (conflictingBroadcasts.length > 0) {
@@ -650,9 +647,9 @@ async function validateBroadcastSchedule(
 async function getActiveBroadcasts(taskRepository: TaskRepository, agentId: string) {
   const activeTasks = await taskRepository.findByCompany('', {
     agentId,
-    taskType: 'broadcast',
+    taskType: 'broadcast',  // Updated from taskType field
     status: 'PROCESSING',
-  }, { limit: 100 });
+  }, { limit: 100, skip: 0 });
 
   // Group by batch and return unique batches
   const batches = [...new Set(activeTasks.map(t => t.batchId))];
@@ -662,10 +659,10 @@ async function getActiveBroadcasts(taskRepository: TaskRepository, agentId: stri
 async function getScheduledBroadcasts(taskRepository: TaskRepository, agentId: string) {
   const scheduledTasks = await taskRepository.findByCompany('', {
     agentId,
-    taskType: 'broadcast',
+    taskType: 'broadcast',  // Updated from taskType field
     status: 'PENDING',
     scheduledBefore: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // Next 7 days
-  }, { limit: 100 });
+  }, { limit: 100, skip: 0 });
 
   const batches = [...new Set(scheduledTasks.map(t => t.batchId))];
   return batches;

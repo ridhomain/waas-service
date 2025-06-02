@@ -1,4 +1,4 @@
-// src/handlers/mailcast.handler.ts (updated with new task utils)
+// src/handlers/mailcast.handler.ts
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Agenda } from '@hokify/agenda';
 import { TaskRepository } from '../repositories/task.repository';
@@ -32,7 +32,7 @@ export const createMailcastHandlers = (deps: MailcastHandlerDeps) => {
       }
 
       const { type, message, agentId, scheduleAt, companyId } = payload;
-      const subject = `v1.mailcast.${agentId}`;
+      const subject = `v1.mailcasts.${agentId}`;
 
       // Validate message type
       const validationError = validateMessageType(type, message);
@@ -40,9 +40,10 @@ export const createMailcastHandlers = (deps: MailcastHandlerDeps) => {
         throw badRequest(validationError, 'INVALID_MESSAGE_TYPE');
       }
 
-      // Create task using the new specific function
+      // Create task using the new specific function (taskType: 'mailcast', taskAgent: 'DAISI' by default)
+      // Note: taskAgent can be configured per company/agent basis in the future
       const jobName = 'send-mailcast-message';
-      const taskPayload = createMailcastTaskPayload('send', companyId, payload, jobName);
+      const taskPayload = createMailcastTaskPayload(companyId, payload, 'DAISI', jobName);
       const taskId = await taskRepository.create(taskPayload);
 
       // Handle scheduled messages

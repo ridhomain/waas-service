@@ -1,23 +1,26 @@
-// src/utils/task.utils.ts (alternative approach with separate functions)
-import { Task, TaskChannel, TaskType } from '../models/task';
+// src/utils/task.utils.ts
+import { Task, TaskAgent, TaskType } from '../models/task';
 import { DaisiSendMessageInput, DaisiSendGroupMessageInput, MailcastSendMessageInput, MetaSendMessageInput } from '../schemas/zod-schemas';
 
 const createBaseTaskPayload = (
-  channel: TaskChannel,
   taskType: TaskType,
+  taskAgent: TaskAgent,
   companyId: string,
   jobName?: string
 ): Omit<Task, '_id' | 'createdAt' | 'updatedAt' | 'agentId' | 'phoneNumber' | 'message' | 'options' | 'variables' | 'userId' | 'label' | 'scheduledAt'> => ({
   companyId,
-  channel,
   taskType,
+  taskAgent,
   status: 'PENDING',
   jobName,
   batchId: undefined,
 });
 
-export const createDaisiTaskPayload = (
-  taskType: TaskType,
+/**
+ * Create task payload for Daisi chat messages
+ * taskType: 'chat', taskAgent: 'DAISI'
+ */
+export const createDaisiChatTaskPayload = (
   companyId: string,
   payload: DaisiSendMessageInput | DaisiSendGroupMessageInput,
   jobName?: string
@@ -26,7 +29,7 @@ export const createDaisiTaskPayload = (
   const phoneNumber = 'phoneNumber' in payload ? payload.phoneNumber : payload.groupJid;
   
   return {
-    ...createBaseTaskPayload('DAISI', taskType, companyId, jobName),
+    ...createBaseTaskPayload('chat', 'DAISI', companyId, jobName),
     agentId: payload.agentId,
     phoneNumber,
     message: payload.message,
@@ -38,13 +41,48 @@ export const createDaisiTaskPayload = (
   };
 };
 
-export const createMailcastTaskPayload = (
-  taskType: TaskType,
+/**
+ * Create task payload for Daisi broadcast messages
+ * taskType: 'broadcast', taskAgent: 'DAISI'
+ */
+export const createDaisiBroadcastTaskPayload = (
   companyId: string,
-  payload: MailcastSendMessageInput,
+  payload: {
+    agentId: string;
+    phoneNumber: string;
+    message: any;
+    options?: any;
+    variables?: any;
+    userId?: string;
+    label?: string;
+    scheduledAt?: Date;
+    batchId?: string;
+  },
   jobName?: string
 ): Omit<Task, '_id' | 'createdAt' | 'updatedAt'> => ({
-  ...createBaseTaskPayload('MAILCAST', taskType, companyId, jobName),
+  ...createBaseTaskPayload('broadcast', 'DAISI', companyId, jobName),
+  agentId: payload.agentId,
+  phoneNumber: payload.phoneNumber,
+  message: payload.message,
+  options: payload.options || {},
+  variables: payload.variables || {},
+  userId: payload.userId,
+  label: payload.label,
+  scheduledAt: payload.scheduledAt || null,
+  batchId: payload.batchId,
+});
+
+/**
+ * Create task payload for Mailcast messages (email->WhatsApp forwarding)
+ * taskType: 'mailcast', taskAgent: determined by configuration
+ */
+export const createMailcastTaskPayload = (
+  companyId: string,
+  payload: MailcastSendMessageInput,
+  taskAgent: TaskAgent = 'DAISI', // Default to DAISI, can be overridden
+  jobName?: string
+): Omit<Task, '_id' | 'createdAt' | 'updatedAt'> => ({
+  ...createBaseTaskPayload('mailcast', taskAgent, companyId, jobName),
   agentId: payload.agentId,
   phoneNumber: payload.phoneNumber,
   message: payload.message,
@@ -55,40 +93,103 @@ export const createMailcastTaskPayload = (
   scheduledAt: payload.scheduleAt ? new Date(payload.scheduleAt) : null,
 });
 
-export const createMetaTaskPayload = (
-  taskType: TaskType,
+/**
+ * Create task payload for Meta chat messages
+ * taskType: 'chat', taskAgent: 'META'
+ */
+export const createMetaChatTaskPayload = (
   companyId: string,
   payload: MetaSendMessageInput,
   jobName?: string
 ): Omit<Task, '_id' | 'createdAt' | 'updatedAt'> => ({
-  ...createBaseTaskPayload('META', taskType, companyId, jobName),
+  ...createBaseTaskPayload('chat', 'META', companyId, jobName),
   agentId: payload.agentId || '',
   phoneNumber: payload.to,
   message: payload.message,
-  options: {},
+  options: { metaCredentials: payload.metaCredentials },
   variables: {},
   userId: undefined,
   label: undefined,
   scheduledAt: payload.scheduleAt ? new Date(payload.scheduleAt) : null,
 });
 
-// Keep the old function for backward compatibility, but mark it as deprecated
-/** @deprecated Use createDaisiTaskPayload, createMailcastTaskPayload, or createMetaTaskPayload instead */
-export const createTaskPayload = (
-  channel: TaskChannel,
-  taskType: TaskType,
+/**
+ * Create task payload for Meta broadcast messages
+ * taskType: 'broadcast', taskAgent: 'META'
+ */
+export const createMetaBroadcastTaskPayload = (
   companyId: string,
-  payload: DaisiSendMessageInput | DaisiSendGroupMessageInput | MailcastSendMessageInput | MetaSendMessageInput,
+  payload: {
+    agentId: string;
+    phoneNumber: string;
+    message: any;
+    options?: any;
+    variables?: any;
+    userId?: string;
+    label?: string;
+    scheduledAt?: Date;
+    batchId?: string;
+    metaCredentials: any;
+  },
+  jobName?: string
+): Omit<Task, '_id' | 'createdAt' | 'updatedAt'> => ({
+  ...createBaseTaskPayload('broadcast', 'META', companyId, jobName),
+  agentId: payload.agentId,
+  phoneNumber: payload.phoneNumber,
+  message: payload.message,
+  options: { 
+    ...payload.options,
+    metaCredentials: payload.metaCredentials 
+  },
+  variables: payload.variables || {},
+  userId: payload.userId,
+  label: payload.label,
+  scheduledAt: payload.scheduledAt || null,
+  batchId: payload.batchId,
+});
+
+/**
+ * Create task payload for Meta mailcast messages
+ * taskType: 'mailcast', taskAgent: 'META'
+ */
+export const createMetaMailcastTaskPayload = (
+  companyId: string,
+  payload: MailcastSendMessageInput & { metaCredentials: any },
+  jobName?: string
+): Omit<Task, '_id' | 'createdAt' | 'updatedAt'> => ({
+  ...createBaseTaskPayload('mailcast', 'META', companyId, jobName),
+  agentId: payload.agentId,
+  phoneNumber: payload.phoneNumber,
+  message: payload.message,
+  options: { 
+    ...payload.options,
+    metaCredentials: payload.metaCredentials 
+  },
+  variables: payload.variables || {},
+  userId: payload.userId,
+  label: payload.label,
+  scheduledAt: payload.scheduleAt ? new Date(payload.scheduleAt) : null,
+});
+
+// Keep the old function for backward compatibility, but mark it as deprecated
+/** @deprecated Use specific task creation functions instead */
+export const createTaskPayload = (
+  taskType: TaskType,
+  taskAgent: TaskAgent,
+  companyId: string,
+  payload: any,
   jobName?: string
 ): Omit<Task, '_id' | 'createdAt' | 'updatedAt'> => {
-  switch (channel) {
-    case 'DAISI':
-      return createDaisiTaskPayload(taskType, companyId, payload as DaisiSendMessageInput | DaisiSendGroupMessageInput, jobName);
-    case 'MAILCAST':
-      return createMailcastTaskPayload(taskType, companyId, payload as MailcastSendMessageInput, jobName);
-    case 'META':
-      return createMetaTaskPayload(taskType, companyId, payload as MetaSendMessageInput, jobName);
+  switch (`${taskType}-${taskAgent}`) {
+    case 'chat-DAISI':
+      return createDaisiChatTaskPayload(companyId, payload, jobName);
+    case 'mailcast-DAISI':
+      return createMailcastTaskPayload(companyId, payload, 'DAISI', jobName);
+    case 'chat-META':
+      return createMetaChatTaskPayload(companyId, payload, jobName);
+    case 'mailcast-META':
+      return createMetaMailcastTaskPayload(companyId, payload, jobName);
     default:
-      throw new Error(`Unsupported channel: ${channel}`);
+      throw new Error(`Unsupported combination: taskType=${taskType}, taskAgent=${taskAgent}`);
   }
 };

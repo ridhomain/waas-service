@@ -1,4 +1,4 @@
-// src/handlers/meta.handler.ts (updated version)
+// src/handlers/meta.handler.ts
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Agenda } from '@hokify/agenda';
 import { MetaSendMessageInput } from '../schemas/zod-schemas';

@@ -41,9 +41,7 @@ export const defineBroadcastSignalJobs = (
         const state = JSON.parse(sc.decode(currentState.value));
         state.status = 'PROCESSING';
         state.startedAt = new Date();
-        await kv.put(stateKey, sc.encode(JSON.stringify(state)), { 
-          ttl: 7 * 24 * 60 * 60 * 1000 // 7 days
-        });
+        await kv.put(stateKey, sc.encode(JSON.stringify(state)));
       }
 
       // Send start signal to agent
@@ -78,68 +76,70 @@ export const defineBroadcastSignalJobs = (
   });
 
   // Periodic job to check broadcast completion
-  agenda.define("check-broadcast-completion", async (job: Job) => {
-    try {
-      // Find all PROCESSING broadcasts
-      const processingTasks = await fastify.taskRepository.findByCompany('', {
-        taskType: 'broadcast',
-        status: 'PROCESSING',
-      }, { limit: 1000 });
+  // agenda.define("check-broadcast-completion", async (job: Job) => {
+    
+  //   try {
+  //     // Find all PROCESSING broadcasts
+  //     const processingTasks = await fastify.taskRepository.findByCompany('', {
+  //       taskType: 'broadcast',
+  //       status: 'PROCESSING',
+  //     }, { 
+  //       limit: 1000,
+  //       skip: 0
+  //     });
 
-      // Group by batch
-      const batches = new Map<string, any[]>();
-      for (const task of processingTasks) {
-        if (!task.batchId) continue;
-        if (!batches.has(task.batchId)) {
-          batches.set(task.batchId, []);
-        }
-        batches.get(task.batchId)!.push(task);
-      }
+  //     // Group by batch
+  //     const batches = new Map<string, any[]>();
+  //     for (const task of processingTasks) {
+  //       if (!task.batchId) continue;
+  //       if (!batches.has(task.batchId)) {
+  //         batches.set(task.batchId, []);
+  //       }
+  //       batches.get(task.batchId)!.push(task);
+  //     }
 
-      // Check each batch
-      for (const [batchId, tasks] of batches) {
-        const allTasks = await fastify.taskRepository.findByBatch(batchId);
-        const stats = {
-          total: allTasks.length,
-          completed: allTasks.filter(t => t.status === 'COMPLETED').length,
-          failed: allTasks.filter(t => t.status === 'ERROR').length,
-          processing: allTasks.filter(t => t.status === 'PROCESSING').length,
-          pending: allTasks.filter(t => t.status === 'PENDING').length,
-        };
+  //     // Check each batch
+  //     for (const [batchId, tasks] of batches) {
+  //       const allTasks = await fastify.taskRepository.findByBatch(batchId);
+  //       const stats = {
+  //         total: allTasks.length,
+  //         completed: allTasks.filter(t => t.status === 'COMPLETED').length,
+  //         failed: allTasks.filter(t => t.status === 'ERROR').length,
+  //         processing: allTasks.filter(t => t.status === 'PROCESSING').length,
+  //         pending: allTasks.filter(t => t.status === 'PENDING').length,
+  //       };
 
-        // If all tasks are done (completed or failed)
-        if (stats.processing === 0 && stats.pending === 0) {
-          const agentId = allTasks[0].agentId;
+  //       // If all tasks are done (completed or failed)
+  //       if (stats.processing === 0 && stats.pending === 0) {
+  //         const agentId = allTasks[0].agentId;
           
-          // Update KV state
-          const kv = await fastify.js.views.kv(`broadcast_state`);
-          const stateKey = `${agentId}_${batchId}`;
-          const currentState = await kv.get(stateKey);
+  //         // Update KV state
+  //         const kv = await fastify.js.views.kv(`broadcast_state`);
+  //         const stateKey = `${agentId}_${batchId}`;
+  //         const currentState = await kv.get(stateKey);
 
-          if (currentState?.value) {
-            const state = JSON.parse(sc.decode(currentState.value));
-            state.status = 'COMPLETED';
-            state.completedAt = new Date();
-            state.stats = stats;
-            await kv.put(stateKey, sc.encode(JSON.stringify(state)), { 
-              ttl: 7 * 24 * 60 * 60 * 1000 
-            });
-          }
+  //         if (currentState?.value) {
+  //           const state = JSON.parse(sc.decode(currentState.value));
+  //           state.status = 'COMPLETED';
+  //           state.completedAt = new Date();
+  //           state.stats = stats;
+  //           await kv.put(stateKey, sc.encode(JSON.stringify(state)));
+  //         }
 
-          fastify.log.info(
-            { batchId, stats },
-            "[Broadcast] Broadcast marked as completed"
-          );
-        }
-      }
-    } catch (err) {
-      fastify.log.error(
-        { err },
-        "[Broadcast] Error checking broadcast completion"
-      );
-    }
-  });
+  //         fastify.log.info(
+  //           { batchId, stats },
+  //           "[Broadcast] Broadcast marked as completed"
+  //         );
+  //       }
+  //     }
+  //   } catch (err) {
+  //     fastify.log.error(
+  //       { err },
+  //       "[Broadcast] Error checking broadcast completion"
+  //     );
+  //   }
+  // });
 
   // Schedule periodic completion check
-  agenda.every('1 minute', 'check-broadcast-completion');
+  // agenda.every('30 minute', 'check-broadcast-completion');
 };

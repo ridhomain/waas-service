@@ -43,7 +43,7 @@ export const BaseMessageSchema = z.object({
   label: z.string().optional(),
 });
 
-// Daisi schemas
+// Daisi schemas (taskType: 'chat', taskAgent: 'DAISI')
 export const DaisiSendMessageSchema = BaseMessageSchema.extend({
   phoneNumber: PhoneNumberSchema,
 });
@@ -64,12 +64,12 @@ export const DaisiLogoutSchema = z.object({
   agentId: AgentIdSchema,
 });
 
-// Mailcast schemas
+// Mailcast schemas (taskType: 'mailcast', taskAgent: determined by config)
 export const MailcastSendMessageSchema = BaseMessageSchema.extend({
   phoneNumber: PhoneNumberSchema,
 });
 
-// Meta schemas
+// Meta schemas (taskType: 'chat' or 'mailcast', taskAgent: 'META')
 export const MetaMessageContentSchema = z.object({
   text: z.string().optional(),
   imageUrl: z.string().url().optional(),
@@ -92,11 +92,11 @@ export const MetaSendMessageSchema = z.object({
   scheduleAt: DateTimeSchema.optional(),
 });
 
-// Task schemas
+// Task schemas - Updated with new types
 export const TaskFiltersSchema = z.object({
   status: z.enum(['PENDING', 'PROCESSING', 'COMPLETED', 'ERROR']).optional(),
-  channel: z.enum(['DAISI', 'MAILCAST', 'META']).optional(),
-  type: z.enum(['send', 'broadcast']).optional(),
+  taskType: z.enum(['chat', 'broadcast', 'mailcast']).optional(),  // Updated
+  taskAgent: z.enum(['DAISI', 'META']).optional(),                // Updated
   label: z.string().optional(),
   agentId: z.string().optional(),
   scheduledBefore: DateTimeSchema.optional(),
@@ -112,7 +112,7 @@ export const TaskUpdateSchema = z.object({
   message: 'At least one field must be provided for update',
 });
 
-// Broadcast schemas
+// Broadcast schemas (taskType: 'broadcast')
 const BaseBroadcastSchema = z.object({
   companyId: CompanyIdSchema,
   agentId: AgentIdSchema,

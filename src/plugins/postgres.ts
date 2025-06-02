@@ -14,10 +14,9 @@ declare module 'fastify' {
 const postgresPlugin: FastifyPluginAsync = async (fastify) => {
   const pool = new Pool({
     connectionString: fastify.config.POSTGRES_DSN,
-    max: 5, // Reduced from 20 - this API doesn't need many connections
+    max: 5,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
-    // Connection pooling optimization
     allowExitOnIdle: true,
   });
 
