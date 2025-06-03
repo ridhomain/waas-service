@@ -3,17 +3,10 @@ import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 import { createTaskHandlers } from '../../handlers/task.handler';
-import { TaskFiltersSchema, TaskUpdateSchema } from '../../schemas/zod-schemas';
+import { TaskFiltersSchema, TaskUpdateSchema, TaskTypeQuerySchema } from '../../schemas/zod-schemas';
 
 const TaskParamsSchema = z.object({
   id: z.string().min(1, 'Task ID is required'),
-});
-
-const TaskTypeQuerySchema = z.object({
-  agentId: z.string().optional(),
-  taskAgent: z.enum(['DAISI', 'META']).optional(),
-  limit: z.number().int().min(1).max(100).default(20),
-  skip: z.number().int().min(0).default(0),
 });
 
 const taskRoutes: FastifyPluginAsync = async (fastify) => {

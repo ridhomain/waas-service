@@ -28,6 +28,13 @@ declare module 'fastify' {
     mongo: {
       db: Db;
     };
+
+    // Postgres
+    pg: {
+      connect: () => Promise<any>;
+      query: (text: string, values?: any[]) => Promise<any>;
+      pool: any;
+    };
     
     // Repositories
     taskRepository: TaskRepository;

@@ -79,8 +79,8 @@ export const createTaskRepository = (db: Db) => {
     const query: Filter<Task> = { companyId };
     
     if (filters?.status) query.status = filters.status;
-    if (filters?.taskType) query.taskType = filters.taskType;      // Updated
-    if (filters?.taskAgent) query.taskAgent = filters.taskAgent;  // Updated
+    if (filters?.taskType) query.taskType = filters.taskType;
+    if (filters?.taskAgent) query.taskAgent = filters.taskAgent;
     if (filters?.agentId) query.agentId = filters.agentId;
     if (filters?.label) query.label = filters.label;
     if (filters?.scheduledBefore) {
@@ -118,8 +118,8 @@ export const createTaskRepository = (db: Db) => {
     const query: Filter<Task> = { companyId };
     
     if (filters?.status) query.status = filters.status;
-    if (filters?.taskType) query.taskType = filters.taskType;      // Updated
-    if (filters?.taskAgent) query.taskAgent = filters.taskAgent;  // Updated
+    if (filters?.taskType) query.taskType = filters.taskType;
+    if (filters?.taskAgent) query.taskAgent = filters.taskAgent;
     if (filters?.agentId) query.agentId = filters.agentId;
     
     return collection.countDocuments(query);
@@ -192,55 +192,64 @@ export const createTaskRepository = (db: Db) => {
       .toArray();
   };
 
-  // Stats method for analytics
+  // Fixed stats method with proper aggregation
   const getTaskStats = async (companyId: string): Promise<{
     total: number;
     byType: Record<TaskType, number>;
     byAgent: Record<TaskAgent, number>;
     byStatus: Record<TaskStatus, number>;
   }> => {
-    const pipeline = [
-      { $match: { companyId } },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          byType: {
-            $push: {
-              type: '$taskType',
-              agent: '$taskAgent',
-              status: '$status',
-            }
-          }
-        }
-      }
-    ];
-
-    const result = await collection.aggregate(pipeline).toArray();
-    
-    if (result.length === 0) {
-      return {
-        total: 0,
-        byType: { chat: 0, broadcast: 0, mailcast: 0 },
-        byAgent: { DAISI: 0, META: 0 },
-        byStatus: { PENDING: 0, PROCESSING: 0, COMPLETED: 0, ERROR: 0 },
-      };
-    }
-
-    const stats = result[0];
+    // Initialize with default values
     const byType: Record<TaskType, number> = { chat: 0, broadcast: 0, mailcast: 0 };
     const byAgent: Record<TaskAgent, number> = { DAISI: 0, META: 0 };
     const byStatus: Record<TaskStatus, number> = { PENDING: 0, PROCESSING: 0, COMPLETED: 0, ERROR: 0 };
 
-    // Count by categories
-    stats.byType.forEach((item: any) => {
-      if (item.type in byType) byType[item.type]++;
-      if (item.agent in byAgent) byAgent[item.agent]++;
-      if (item.status in byStatus) byStatus[item.status]++;
+    // Get total count
+    const total = await collection.countDocuments({ companyId });
+
+    if (total === 0) {
+      return { total: 0, byType, byAgent, byStatus };
+    }
+
+    // Aggregate by task type
+    const typeStats = await collection.aggregate([
+      { $match: { companyId } },
+      { $group: { _id: '$taskType', count: { $sum: 1 } } }
+    ]).toArray();
+
+    // Aggregate by task agent
+    const agentStats = await collection.aggregate([
+      { $match: { companyId } },
+      { $group: { _id: '$taskAgent', count: { $sum: 1 } } }
+    ]).toArray();
+
+    // Aggregate by status
+    const statusStats = await collection.aggregate([
+      { $match: { companyId } },
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]).toArray();
+
+    // Populate results
+    typeStats.forEach((item) => {
+      if (item._id && item._id in byType) {
+        byType[item._id as TaskType] = item.count;
+      }
+    });
+
+    agentStats.forEach((item) => {
+      if (item._id && item._id in byAgent) {
+        byAgent[item._id as TaskAgent] = item.count;
+      }
+    });
+
+    statusStats.forEach((item) => {
+      if (item._id && item._id in byStatus) {
+        byStatus[item._id as TaskStatus] = item.count;
+      }
     });
 
     return {
-      total: stats.total,
+      total,
       byType,
       byAgent,
       byStatus,

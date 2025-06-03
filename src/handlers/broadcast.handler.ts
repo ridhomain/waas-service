@@ -2,7 +2,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Agenda } from '@hokify/agenda';
 import { TaskRepository } from '../repositories/task.repository';
-import { Pool } from 'pg';
 import { nanoid } from '../utils';
 import { forbidden, badRequest, handleError, conflict } from '../utils/errors';
 import { sendSuccess, sendError } from '../utils/response';
@@ -22,7 +21,7 @@ export interface BroadcastHandlerDeps {
   taskRepository: TaskRepository;
   agenda: Agenda;
   js: JetStreamClient;
-  pgPool: Pool;
+  pg: any;
   publishEvent: (subject: string, data: any) => Promise<void>;
   log: any;
 }
@@ -44,7 +43,7 @@ interface BroadcastMeta {
 }
 
 export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
-  const { taskRepository, agenda, js, pgPool, publishEvent, log } = deps;
+  const { taskRepository, agenda, js, pg, publishEvent, log } = deps;
   const sc = StringCodec();
 
   const broadcastByTags = async (
@@ -74,7 +73,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
 
       // Get contacts from Postgres (excluding groups)
       const contacts = await getContactsByTags({
-        pgPool,
+        pg,
         companySchema: userCompany,
         agentId,
         tags: tags.split(',').map(t => t.trim()),
@@ -375,7 +374,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
 
       if (tags) {
         const contacts = await getContactsByTags({
-          pgPool,
+          pg,
           companySchema: userCompany,
           agentId,
           tags: tags.split(',').map(t => t.trim()),
@@ -581,12 +580,12 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
 
 // Helper functions
 async function getContactsByTags(params: {
-  pgPool: Pool;
+  pg: any;
   companySchema: string;
   agentId: string;
   tags: string[];
 }): Promise<Array<{ phone_number: string; custom_name?: string }>> {
-  const { pgPool, companySchema, agentId, tags } = params;
+  const { pg, companySchema, agentId, tags } = params;
   
   // Build tag query with JSONB operators
   const tagConditions = tags.map((_, idx) => `tags @> ${idx + 2}::jsonb`).join(' OR ');
@@ -604,7 +603,7 @@ async function getContactsByTags(params: {
 
   const values = [agentId, ...tags.map(tag => JSON.stringify([tag]))];
   
-  const result = await pgPool.query(query, values);
+  const result = await pg.query(query, values);
   return result.rows;
 }
 

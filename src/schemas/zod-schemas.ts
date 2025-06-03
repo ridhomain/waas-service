@@ -1,6 +1,32 @@
 // src/schemas/zod-schemas.ts
 import { z } from 'zod';
 
+// Helper for string-to-number conversion (common in query params)
+const stringToNumber = z.string().transform((str, ctx) => {
+  const parsed = parseInt(str);
+  if (isNaN(parsed)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Not a number",
+    });
+    return z.NEVER;
+  }
+  return parsed;
+});
+
+const stringToOptionalNumber = z.string().transform((str, ctx) => {
+  if (str === '' || str === undefined) return undefined;
+  const parsed = parseInt(str);
+  if (isNaN(parsed)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Not a number",
+    });
+    return z.NEVER;
+  }
+  return parsed;
+}).optional();
+
 // Base schemas
 export const CompanyIdSchema = z.string().min(1, 'Company ID is required');
 export const AgentIdSchema = z.string().min(1, 'Agent ID is required');
@@ -92,17 +118,24 @@ export const MetaSendMessageSchema = z.object({
   scheduleAt: DateTimeSchema.optional(),
 });
 
-// Task schemas - Updated with new types
+// Task schemas - Updated with proper number handling for query params
 export const TaskFiltersSchema = z.object({
   status: z.enum(['PENDING', 'PROCESSING', 'COMPLETED', 'ERROR']).optional(),
-  taskType: z.enum(['chat', 'broadcast', 'mailcast']).optional(),  // Updated
-  taskAgent: z.enum(['DAISI', 'META']).optional(),                // Updated
+  taskType: z.enum(['chat', 'broadcast', 'mailcast']).optional(),
+  taskAgent: z.enum(['DAISI', 'META']).optional(),
   label: z.string().optional(),
   agentId: z.string().optional(),
   scheduledBefore: DateTimeSchema.optional(),
-  limit: z.number().int().min(1).max(100).default(20),
-  skip: z.number().int().min(0).default(0),
-  page: z.number().int().min(1).optional(),
+  // Handle string-to-number conversion for query parameters
+  limit: z.union([z.number(), stringToNumber]).refine(val => val >= 1 && val <= 100, {
+    message: 'Limit must be between 1 and 100'
+  }).default(20),
+  skip: z.union([z.number(), stringToNumber]).refine(val => val >= 0, {
+    message: 'Skip must be non-negative'
+  }).default(0),
+  page: z.union([z.number(), stringToOptionalNumber]).refine(val => val === undefined || val >= 1, {
+    message: 'Page must be at least 1'
+  }).optional(),
 });
 
 export const TaskUpdateSchema = z.object({
@@ -151,6 +184,18 @@ export const CancelBroadcastSchema = z.object({
   batchId: z.string().min(1, 'Batch ID is required'),
 });
 
+// Task type-specific query schemas with proper number handling
+export const TaskTypeQuerySchema = z.object({
+  agentId: z.string().optional(),
+  taskAgent: z.enum(['DAISI', 'META']).optional(),
+  limit: z.union([z.number(), stringToNumber]).refine(val => val >= 1 && val <= 100, {
+    message: 'Limit must be between 1 and 100'
+  }).default(20),
+  skip: z.union([z.number(), stringToNumber]).refine(val => val >= 0, {
+    message: 'Skip must be non-negative'
+  }).default(0),
+});
+
 // Type exports
 export type DaisiSendMessageInput = z.infer<typeof DaisiSendMessageSchema>;
 export type DaisiSendGroupMessageInput = z.infer<typeof DaisiSendGroupMessageSchema>;
@@ -165,3 +210,4 @@ export type BroadcastByPhonesInput = z.infer<typeof BroadcastByPhonesSchema>;
 export type BroadcastPreviewInput = z.infer<typeof BroadcastPreviewSchema>;
 export type BroadcastStatusInput = z.infer<typeof BroadcastStatusSchema>;
 export type CancelBroadcastInput = z.infer<typeof CancelBroadcastSchema>;
+export type TaskTypeQueryInput = z.infer<typeof TaskTypeQuerySchema>;

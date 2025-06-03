@@ -2,7 +2,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { ObjectId } from 'mongodb';
 import { TaskRepository } from '../repositories/task.repository';
-import { TaskFiltersInput, TaskUpdateInput } from '../schemas/zod-schemas';
+import { TaskFiltersInput, TaskUpdateInput, TaskTypeQueryInput } from '../schemas/zod-schemas';
 import { Task, TaskStatus, TaskAgent, TaskType } from '../models/task';
 import { sendSuccess, sendError, createPaginationMeta } from '../utils/response';
 import { badRequest, notFound, unauthorized, handleError } from '../utils/errors';
@@ -26,8 +26,8 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
 
       const {
         status,
-        taskType,    // Updated from 'channel' and 'type'
-        taskAgent,   // Updated from 'channel'
+        taskType,
+        taskAgent,
         label,
         agentId,
         limit = 20,
@@ -41,8 +41,8 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
 
       const filters = {
         status: status as TaskStatus,
-        taskType: taskType as TaskType,      // Updated
-        taskAgent: taskAgent as TaskAgent,   // Updated
+        taskType: taskType as TaskType,
+        taskAgent: taskAgent as TaskAgent,
         label,
         agentId,
         scheduledBefore: scheduledBefore ? new Date(scheduledBefore) : undefined,
@@ -166,14 +166,7 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
 
   // New handlers for specific task types
   const getChatTasks = async (
-    request: FastifyRequest<{ 
-      Querystring: { 
-        agentId?: string; 
-        taskAgent?: TaskAgent; 
-        limit?: number; 
-        skip?: number; 
-      } 
-    }>,
+    request: FastifyRequest<{ Querystring: TaskTypeQueryInput }>,
     reply: FastifyReply
   ) => {
     try {
@@ -205,14 +198,7 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
   };
 
   const getBroadcastTasks = async (
-    request: FastifyRequest<{ 
-      Querystring: { 
-        agentId?: string; 
-        taskAgent?: TaskAgent; 
-        limit?: number; 
-        skip?: number; 
-      } 
-    }>,
+    request: FastifyRequest<{ Querystring: TaskTypeQueryInput }>,
     reply: FastifyReply
   ) => {
     try {
@@ -244,14 +230,7 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
   };
 
   const getMailcastTasks = async (
-    request: FastifyRequest<{ 
-      Querystring: { 
-        agentId?: string; 
-        taskAgent?: TaskAgent; 
-        limit?: number; 
-        skip?: number; 
-      } 
-    }>,
+    request: FastifyRequest<{ Querystring: TaskTypeQueryInput }>,
     reply: FastifyReply
   ) => {
     try {
