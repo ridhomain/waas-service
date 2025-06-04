@@ -69,7 +69,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
       // Get contacts from Postgres (excluding groups)
       const contacts = await getContactsByTags({
         pg,
-        companySchema: userCompany,
+        companyId: userCompany,
         agentId,
         tags: tags.split(',').map((t) => t.trim()),
       });
@@ -157,7 +157,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
               label,
               taskAgent,
               contact: {
-                name: contacts[i].custom_name || contacts[i].phone_number,
+                // name: contacts[i].custom_name || contacts[i].phone_number,
                 phone: contacts[i].phone_number,
               },
             })
@@ -244,14 +244,13 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
       if (tags) {
         const contacts = await getContactsByTags({
           pg,
-          companySchema: userCompany,
+          companyId: userCompany,
           agentId,
           tags: tags.split(',').map((t) => t.trim()),
         });
         contactCount = contacts.length;
         sampleContacts = contacts.slice(0, 5).map((c) => ({
           phone: c.phone_number,
-          name: c.custom_name,
         }));
       } else if (phones) {
         const phoneList = phones.split(',').map((p) => p.trim());
@@ -549,23 +548,26 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
 // Helper functions
 async function getContactsByTags(params: {
   pg: any;
-  companySchema: string;
+  companyId: string;
   agentId: string;
   tags: string[];
-}): Promise<Array<{ phone_number: string; custom_name?: string }>> {
-  const { pg, companySchema, agentId, tags } = params;
+}): Promise<Array<{ phone_number: string }>> {
+  const { pg, companyId, agentId, tags } = params;
 
-  // Build tag query with JSONB operators
-  const tagConditions = tags.map((_, idx) => `tags @> $${idx + 2}::jsonb`).join(' OR ');
+  // Build tag query with JSONB operators - ALL tags must be present (AND condition)
+  const tagConditions = tags.map((_, idx) => `tags @> $${idx + 2}::jsonb`).join(' AND ');
+
+  // Properly format schema and table name with quotes
+  const schemaName = `daisi_${companyId}`;
+  const tableName = `"${schemaName}"."contacts"`;
 
   const query = `
-    SELECT DISTINCT phone_number, custom_name
-    FROM ${companySchema}.contacts 
+    SELECT DISTINCT phone_number
+    FROM ${tableName} 
     WHERE agent_id = $1 
-      AND status = 'ACTIVE'
-      AND type != 'GROUP'
-      AND phone_number NOT LIKE '%@g.us%'
       AND (${tagConditions})
+      AND LENGTH(phone_number) >= 10
+      AND LENGTH(phone_number) <= 15
     ORDER BY phone_number
   `;
 
