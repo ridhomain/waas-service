@@ -73,7 +73,7 @@ export const createMailcastHandlers = (deps: MailcastHandlerDeps) => {
           });
         } catch (err) {
           log.error({ err, taskId }, '[Mailcast] Failed to schedule with Agenda');
-          
+
           // Update task status to error
           await taskRepository.update(taskId, {
             status: 'ERROR',
@@ -97,7 +97,7 @@ export const createMailcastHandlers = (deps: MailcastHandlerDeps) => {
         log.info({ subject, taskId, agentId }, '[Mailcast] Published to JetStream');
 
         // Note: For mailcast, we don't wait for acknowledgment from the agent
-        // The WA Events Processor will handle the actual sending and update the task status
+        // The WA Agents Processor will handle the actual sending and update the task status
 
         return sendSuccess(reply, {
           status: 'sent' as const,

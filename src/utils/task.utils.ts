@@ -1,13 +1,31 @@
 // src/utils/task.utils.ts
 import { Task, TaskAgent, TaskMetadata, TaskType } from '../models/task';
-import { DaisiSendMessageInput, DaisiSendGroupMessageInput, MailcastSendMessageInput, MetaSendMessageInput } from '../schemas/zod-schemas';
+import {
+  DaisiSendMessageInput,
+  DaisiSendGroupMessageInput,
+  MailcastSendMessageInput,
+  MetaSendMessageInput,
+} from '../schemas/zod-schemas';
 
 const createBaseTaskPayload = (
   taskType: TaskType,
   taskAgent: TaskAgent,
   companyId: string,
   jobName?: string
-): Omit<Task, '_id' | 'createdAt' | 'updatedAt' | 'agentId' | 'phoneNumber' | 'message' | 'options' | 'variables' | 'userId' | 'label' | 'scheduledAt'> => ({
+): Omit<
+  Task,
+  | '_id'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'agentId'
+  | 'phoneNumber'
+  | 'message'
+  | 'options'
+  | 'variables'
+  | 'userId'
+  | 'label'
+  | 'scheduledAt'
+> => ({
   companyId,
   taskType,
   taskAgent,
@@ -27,7 +45,7 @@ export const createDaisiChatTaskPayload = (
 ): Omit<Task, '_id' | 'createdAt' | 'updatedAt'> => {
   // Handle both regular messages and group messages
   const phoneNumber = 'phoneNumber' in payload ? payload.phoneNumber : payload.groupJid;
-  
+
   return {
     ...createBaseTaskPayload('chat', 'DAISI', companyId, jobName),
     agentId: payload.agentId,
@@ -138,9 +156,9 @@ export const createMetaBroadcastTaskPayload = (
   agentId: payload.agentId,
   phoneNumber: payload.phoneNumber,
   message: payload.message,
-  options: { 
+  options: {
     ...payload.options,
-    metaCredentials: payload.metaCredentials 
+    metaCredentials: payload.metaCredentials,
   },
   variables: payload.variables || {},
   userId: payload.userId,
@@ -162,9 +180,9 @@ export const createMetaMailcastTaskPayload = (
   agentId: payload.agentId,
   phoneNumber: payload.phoneNumber,
   message: payload.message,
-  options: { 
+  options: {
     ...payload.options,
-    metaCredentials: payload.metaCredentials 
+    metaCredentials: payload.metaCredentials,
   },
   variables: payload.variables || {},
   userId: payload.userId,

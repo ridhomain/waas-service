@@ -1,4 +1,5 @@
-// src/routes/v1/broadcast.routes.ts
+// Updates for src/routes/v1/broadcast.routes.ts
+
 import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import { createBroadcastHandlers } from '../../handlers/broadcast.handler';
@@ -21,26 +22,38 @@ const broadcastRoutes: FastifyPluginAsync = async (fastify) => {
 
   // Create broadcasts
   fastify.post('/broadcast/by-tags', {
-    preHandler: [fastify.zodValidate({ body: BroadcastByTagsSchema })],
+    preHandler: [fastify.authenticate, fastify.zodValidate({ body: BroadcastByTagsSchema })],
     handler: handlers.broadcastByTags,
   });
 
   // Preview broadcast
   fastify.post('/broadcast/preview', {
-    preHandler: [fastify.zodValidate({ body: BroadcastPreviewSchema })],
+    preHandler: [fastify.authenticate, fastify.zodValidate({ body: BroadcastPreviewSchema })],
     handler: handlers.previewBroadcast,
   });
 
   // Get broadcast status
   fastify.get('/broadcast/:batchId/status', {
-    preHandler: [fastify.zodValidate({ params: BroadcastStatusSchema })],
+    preHandler: [fastify.authenticate, fastify.zodValidate({ params: BroadcastStatusSchema })],
     handler: handlers.getBroadcastStatus,
   });
 
   // Cancel broadcast
   fastify.delete('/broadcast/:batchId', {
-    preHandler: [fastify.zodValidate({ params: CancelBroadcastSchema })],
+    preHandler: [fastify.authenticate, fastify.zodValidate({ params: CancelBroadcastSchema })],
     handler: handlers.cancelBroadcast,
+  });
+
+  // Pause broadcast
+  fastify.put('/broadcast/:batchId/pause', {
+    preHandler: [fastify.authenticate, fastify.zodValidate({ params: BroadcastStatusSchema })],
+    handler: handlers.pauseBroadcast,
+  });
+
+  // Resume broadcast
+  fastify.put('/broadcast/:batchId/resume', {
+    preHandler: [fastify.authenticate, fastify.zodValidate({ params: BroadcastStatusSchema })],
+    handler: handlers.resumeBroadcast,
   });
 };
 
