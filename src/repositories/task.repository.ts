@@ -12,9 +12,7 @@ interface PaginationOptions {
 export const createTaskRepository = (db: Db) => {
   const collection: Collection<Task> = db.collection<Task>('tasks');
 
-  const create = async (
-    task: Omit<Task, '_id' | 'createdAt' | 'updatedAt'>
-  ): Promise<string> => {
+  const create = async (task: Omit<Task, '_id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
     const now = new Date();
     const result = await collection.insertOne({
       ...task,
@@ -29,7 +27,7 @@ export const createTaskRepository = (db: Db) => {
     tasks: Omit<Task, '_id' | 'createdAt' | 'updatedAt'>[]
   ): Promise<string[]> => {
     if (tasks.length === 0) return [];
-    
+
     const now = new Date();
     const docs = tasks.map((t) => ({
       ...t,
@@ -37,7 +35,7 @@ export const createTaskRepository = (db: Db) => {
       createdAt: now,
       updatedAt: now,
     }));
-    
+
     const result = await collection.insertMany(docs);
     return Object.values(result.insertedIds).map((id) => id.toString());
   };
@@ -59,7 +57,7 @@ export const createTaskRepository = (db: Db) => {
         },
       }
     );
-    
+
     return result.modifiedCount > 0;
   };
 
@@ -67,7 +65,7 @@ export const createTaskRepository = (db: Db) => {
     if (!ObjectId.isValid(taskId)) {
       return null;
     }
-    
+
     return collection.findOne({ _id: new ObjectId(taskId) });
   };
 
@@ -77,7 +75,7 @@ export const createTaskRepository = (db: Db) => {
     pagination?: PaginationOptions
   ): Promise<Task[]> => {
     const query: Filter<Task> = { companyId };
-    
+
     if (filters?.status) query.status = filters.status;
     if (filters?.taskType) query.taskType = filters.taskType;
     if (filters?.taskAgent) query.taskAgent = filters.taskAgent;
@@ -111,17 +109,14 @@ export const createTaskRepository = (db: Db) => {
     return collection.find({ batchId }).toArray();
   };
 
-  const countByCompany = async (
-    companyId: string,
-    filters?: TaskFilters
-  ): Promise<number> => {
+  const countByCompany = async (companyId: string, filters?: TaskFilters): Promise<number> => {
     const query: Filter<Task> = { companyId };
-    
+
     if (filters?.status) query.status = filters.status;
     if (filters?.taskType) query.taskType = filters.taskType;
     if (filters?.taskAgent) query.taskAgent = filters.taskAgent;
     if (filters?.agentId) query.agentId = filters.agentId;
-    
+
     return collection.countDocuments(query);
   };
 
@@ -132,11 +127,11 @@ export const createTaskRepository = (db: Db) => {
     taskAgent?: TaskAgent,
     pagination?: PaginationOptions
   ): Promise<Task[]> => {
-    const query: Filter<Task> = { 
-      companyId, 
-      taskType: 'chat' as TaskType 
+    const query: Filter<Task> = {
+      companyId,
+      taskType: 'chat' as TaskType,
     };
-    
+
     if (agentId) query.agentId = agentId;
     if (taskAgent) query.taskAgent = taskAgent;
 
@@ -154,11 +149,11 @@ export const createTaskRepository = (db: Db) => {
     taskAgent?: TaskAgent,
     pagination?: PaginationOptions
   ): Promise<Task[]> => {
-    const query: Filter<Task> = { 
-      companyId, 
-      taskType: 'broadcast' as TaskType 
+    const query: Filter<Task> = {
+      companyId,
+      taskType: 'broadcast' as TaskType,
     };
-    
+
     if (agentId) query.agentId = agentId;
     if (taskAgent) query.taskAgent = taskAgent;
 
@@ -176,11 +171,11 @@ export const createTaskRepository = (db: Db) => {
     taskAgent?: TaskAgent,
     pagination?: PaginationOptions
   ): Promise<Task[]> => {
-    const query: Filter<Task> = { 
-      companyId, 
-      taskType: 'mailcast' as TaskType 
+    const query: Filter<Task> = {
+      companyId,
+      taskType: 'mailcast' as TaskType,
     };
-    
+
     if (agentId) query.agentId = agentId;
     if (taskAgent) query.taskAgent = taskAgent;
 
@@ -193,7 +188,9 @@ export const createTaskRepository = (db: Db) => {
   };
 
   // Fixed stats method with proper aggregation
-  const getTaskStats = async (companyId: string): Promise<{
+  const getTaskStats = async (
+    companyId: string
+  ): Promise<{
     total: number;
     byType: Record<TaskType, number>;
     byAgent: Record<TaskAgent, number>;
@@ -202,7 +199,12 @@ export const createTaskRepository = (db: Db) => {
     // Initialize with default values
     const byType: Record<TaskType, number> = { chat: 0, broadcast: 0, mailcast: 0 };
     const byAgent: Record<TaskAgent, number> = { DAISI: 0, META: 0 };
-    const byStatus: Record<TaskStatus, number> = { PENDING: 0, PROCESSING: 0, COMPLETED: 0, ERROR: 0 };
+    const byStatus: Record<TaskStatus, number> = {
+      PENDING: 0,
+      PROCESSING: 0,
+      COMPLETED: 0,
+      ERROR: 0,
+    };
 
     // Get total count
     const total = await collection.countDocuments({ companyId });
@@ -212,22 +214,19 @@ export const createTaskRepository = (db: Db) => {
     }
 
     // Aggregate by task type
-    const typeStats = await collection.aggregate([
-      { $match: { companyId } },
-      { $group: { _id: '$taskType', count: { $sum: 1 } } }
-    ]).toArray();
+    const typeStats = await collection
+      .aggregate([{ $match: { companyId } }, { $group: { _id: '$taskType', count: { $sum: 1 } } }])
+      .toArray();
 
     // Aggregate by task agent
-    const agentStats = await collection.aggregate([
-      { $match: { companyId } },
-      { $group: { _id: '$taskAgent', count: { $sum: 1 } } }
-    ]).toArray();
+    const agentStats = await collection
+      .aggregate([{ $match: { companyId } }, { $group: { _id: '$taskAgent', count: { $sum: 1 } } }])
+      .toArray();
 
     // Aggregate by status
-    const statusStats = await collection.aggregate([
-      { $match: { companyId } },
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ]).toArray();
+    const statusStats = await collection
+      .aggregate([{ $match: { companyId } }, { $group: { _id: '$status', count: { $sum: 1 } } }])
+      .toArray();
 
     // Populate results
     typeStats.forEach((item) => {

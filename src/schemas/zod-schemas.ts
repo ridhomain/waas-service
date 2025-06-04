@@ -7,25 +7,28 @@ const stringToNumber = z.string().transform((str, ctx) => {
   if (isNaN(parsed)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Not a number",
+      message: 'Not a number',
     });
     return z.NEVER;
   }
   return parsed;
 });
 
-const stringToOptionalNumber = z.string().transform((str, ctx) => {
-  if (str === '' || str === undefined) return undefined;
-  const parsed = parseInt(str);
-  if (isNaN(parsed)) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Not a number",
-    });
-    return z.NEVER;
-  }
-  return parsed;
-}).optional();
+const stringToOptionalNumber = z
+  .string()
+  .transform((str, ctx) => {
+    if (str === '' || str === undefined) return undefined;
+    const parsed = parseInt(str);
+    if (isNaN(parsed)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Not a number',
+      });
+      return z.NEVER;
+    }
+    return parsed;
+  })
+  .optional();
 
 // Base schemas
 export const CompanyIdSchema = z.string().min(1, 'Company ID is required');
@@ -90,6 +93,15 @@ export const DaisiLogoutSchema = z.object({
   agentId: AgentIdSchema,
 });
 
+export const DaisiDownloadMediaSchema = z.object({
+  companyId: CompanyIdSchema,
+  agentId: AgentIdSchema,
+  messageId: z.string().min(1, 'Message ID is required'),
+  message: z.any().refine((val) => val !== null && val !== undefined, {
+    message: 'Message object is required',
+  }),
+});
+
 // Mailcast schemas (taskType: 'mailcast', taskAgent: determined by config)
 export const MailcastSendMessageSchema = BaseMessageSchema.extend({
   phoneNumber: PhoneNumberSchema,
@@ -127,23 +139,34 @@ export const TaskFiltersSchema = z.object({
   agentId: z.string().optional(),
   scheduledBefore: DateTimeSchema.optional(),
   // Handle string-to-number conversion for query parameters
-  limit: z.union([z.number(), stringToNumber]).refine(val => val >= 1 && val <= 100, {
-    message: 'Limit must be between 1 and 100'
-  }).default(20),
-  skip: z.union([z.number(), stringToNumber]).refine(val => val >= 0, {
-    message: 'Skip must be non-negative'
-  }).default(0),
-  page: z.union([z.number(), stringToOptionalNumber]).refine(val => val === undefined || val >= 1, {
-    message: 'Page must be at least 1'
-  }).optional(),
+  limit: z
+    .union([z.number(), stringToNumber])
+    .refine((val) => val >= 1 && val <= 100, {
+      message: 'Limit must be between 1 and 100',
+    })
+    .default(20),
+  skip: z
+    .union([z.number(), stringToNumber])
+    .refine((val) => val >= 0, {
+      message: 'Skip must be non-negative',
+    })
+    .default(0),
+  page: z
+    .union([z.number(), stringToOptionalNumber])
+    .refine((val) => val === undefined || val >= 1, {
+      message: 'Page must be at least 1',
+    })
+    .optional(),
 });
 
-export const TaskUpdateSchema = z.object({
-  status: z.enum(['PENDING', 'PROCESSING', 'COMPLETED', 'ERROR']).optional(),
-  label: z.string().optional(),
-}).refine(data => Object.keys(data).length > 0, {
-  message: 'At least one field must be provided for update',
-});
+export const TaskUpdateSchema = z
+  .object({
+    status: z.enum(['PENDING', 'PROCESSING', 'COMPLETED', 'ERROR']).optional(),
+    label: z.string().optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: 'At least one field must be provided for update',
+  });
 
 // Broadcast schemas (taskType: 'broadcast')
 const BaseBroadcastSchema = z.object({
@@ -167,14 +190,16 @@ export const BroadcastByPhonesSchema = BaseBroadcastSchema.extend({
   schedule: DateTimeSchema.optional(),
 });
 
-export const BroadcastPreviewSchema = z.object({
-  companyId: CompanyIdSchema,
-  agentId: AgentIdSchema,
-  tags: z.string().optional(),
-  phones: z.string().optional(),
-}).refine(data => data.tags || data.phones, {
-  message: 'Either tags or phones must be provided',
-});
+export const BroadcastPreviewSchema = z
+  .object({
+    companyId: CompanyIdSchema,
+    agentId: AgentIdSchema,
+    tags: z.string().optional(),
+    phones: z.string().optional(),
+  })
+  .refine((data) => data.tags || data.phones, {
+    message: 'Either tags or phones must be provided',
+  });
 
 export const BroadcastStatusSchema = z.object({
   batchId: z.string().min(1, 'Batch ID is required'),
@@ -188,12 +213,18 @@ export const CancelBroadcastSchema = z.object({
 export const TaskTypeQuerySchema = z.object({
   agentId: z.string().optional(),
   taskAgent: z.enum(['DAISI', 'META']).optional(),
-  limit: z.union([z.number(), stringToNumber]).refine(val => val >= 1 && val <= 100, {
-    message: 'Limit must be between 1 and 100'
-  }).default(20),
-  skip: z.union([z.number(), stringToNumber]).refine(val => val >= 0, {
-    message: 'Skip must be non-negative'
-  }).default(0),
+  limit: z
+    .union([z.number(), stringToNumber])
+    .refine((val) => val >= 1 && val <= 100, {
+      message: 'Limit must be between 1 and 100',
+    })
+    .default(20),
+  skip: z
+    .union([z.number(), stringToNumber])
+    .refine((val) => val >= 0, {
+      message: 'Skip must be non-negative',
+    })
+    .default(0),
 });
 
 // Type exports
@@ -201,6 +232,7 @@ export type DaisiSendMessageInput = z.infer<typeof DaisiSendMessageSchema>;
 export type DaisiSendGroupMessageInput = z.infer<typeof DaisiSendGroupMessageSchema>;
 export type DaisiMarkAsReadInput = z.infer<typeof DaisiMarkAsReadSchema>;
 export type DaisiLogoutInput = z.infer<typeof DaisiLogoutSchema>;
+export type DaisiDownloadMediaInput = z.infer<typeof DaisiDownloadMediaSchema>;
 export type MailcastSendMessageInput = z.infer<typeof MailcastSendMessageSchema>;
 export type MetaSendMessageInput = z.infer<typeof MetaSendMessageSchema>;
 export type TaskFiltersInput = z.infer<typeof TaskFiltersSchema>;

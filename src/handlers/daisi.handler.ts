@@ -11,6 +11,7 @@ import {
   DaisiSendGroupMessageInput,
   DaisiMarkAsReadInput,
   DaisiLogoutInput,
+  DaisiDownloadMediaInput,
 } from '../schemas/zod-schemas';
 
 export interface DaisiHandlerDeps {
@@ -43,7 +44,11 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
       }
 
       // Create task using the new specific function (taskType: 'chat', taskAgent: 'DAISI')
-      const taskPayload = createDaisiChatTaskPayload(payload.companyId, payload, 'send-daisi-message');
+      const taskPayload = createDaisiChatTaskPayload(
+        payload.companyId,
+        payload,
+        'send-daisi-message'
+      );
       const taskId = await taskRepository.create(taskPayload);
 
       // Handle scheduled messages
@@ -71,7 +76,7 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
 
       // Send immediately
       await taskRepository.update(taskId, { status: 'PROCESSING' });
-      
+
       const subject = `v1.agents.${payload.agentId}`;
       const result = await requestAgentEvent('SEND_MSG', subject, {
         ...payload,
@@ -121,7 +126,11 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
       }
 
       // Create task using the new specific function (taskType: 'chat', taskAgent: 'DAISI')
-      const taskPayload = createDaisiChatTaskPayload(payload.companyId, payload, 'send-daisi-message');
+      const taskPayload = createDaisiChatTaskPayload(
+        payload.companyId,
+        payload,
+        'send-daisi-message'
+      );
       const taskId = await taskRepository.create(taskPayload);
 
       if (payload.scheduleAt) {
@@ -147,7 +156,7 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
       }
 
       await taskRepository.update(taskId, { status: 'PROCESSING' });
-      
+
       const subject = `v1.agents.${payload.agentId}`;
       const result = await requestAgentEvent('SEND_MSG_TO_GROUP', subject, {
         ...payload,
@@ -234,10 +243,85 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
     }
   };
 
+  const downloadMedia = async (
+    request: FastifyRequest<{ Body: DaisiDownloadMediaInput }>,
+    reply: FastifyReply
+  ) => {
+    try {
+      const payload = request.body;
+      const userCompany = request.user?.company;
+
+      // Validate company authorization
+      if (payload.companyId !== userCompany) {
+        throw forbidden('Unauthorized company access');
+      }
+
+      const { agentId, messageId } = payload;
+
+      // Clean up messageId - remove <AGENT_ID>_ prefix if present
+      const cleanMessageId = messageId.includes('_')
+        ? messageId.split('_').slice(1).join('_')
+        : messageId;
+
+      log.info(
+        {
+          originalMessageId: messageId,
+          cleanMessageId,
+          agentId,
+        },
+        '[Daisi] Requesting media download'
+      );
+
+      const subject = `v1.agents.${agentId}`;
+
+      // Send download request to agent with cleaned messageId
+      const agentPayload = {
+        companyId: payload.companyId,
+        agentId: payload.agentId,
+        messageId: cleanMessageId,
+        message: payload.message,
+      };
+
+      const result = await requestAgentEvent('DOWNLOAD_MEDIA', subject, agentPayload);
+
+      if (!result?.success) {
+        log.error(
+          {
+            messageId: cleanMessageId,
+            error: result?.error,
+          },
+          '[Daisi] Media download failed'
+        );
+        throw createError(500, result?.error || 'Media download failed', 'DOWNLOAD_ERROR');
+      }
+
+      log.info(
+        {
+          messageId: cleanMessageId,
+          mediaType: result.data?.mediaType,
+          hasUrl: !!result.data?.mediaUrl,
+        },
+        '[Daisi] Media download successful'
+      );
+
+      return sendSuccess(reply, {
+        messageId: cleanMessageId,
+        mediaUrl: result.data.mediaUrl,
+        mediaType: result.data.mediaType,
+        mimeType: result.data.mimeType,
+        downloadedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      const appError = handleError(error);
+      return sendError(reply, appError);
+    }
+  };
+
   return {
     sendMessage,
     sendMessageToGroup,
     markAsRead,
     logout,
+    downloadMedia,
   };
 };

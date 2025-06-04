@@ -3,7 +3,11 @@ import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
 import { createTaskHandlers } from '../../handlers/task.handler';
-import { TaskFiltersSchema, TaskUpdateSchema, TaskTypeQuerySchema } from '../../schemas/zod-schemas';
+import {
+  TaskFiltersSchema,
+  TaskUpdateSchema,
+  TaskTypeQuerySchema,
+} from '../../schemas/zod-schemas';
 
 const TaskParamsSchema = z.object({
   id: z.string().min(1, 'Task ID is required'),
@@ -30,10 +34,10 @@ const taskRoutes: FastifyPluginAsync = async (fastify) => {
   // PATCH /tasks/:id - Update task
   fastify.patch('/tasks/:id', {
     preHandler: [
-      fastify.zodValidate({ 
+      fastify.zodValidate({
         params: TaskParamsSchema,
-        body: TaskUpdateSchema 
-      })
+        body: TaskUpdateSchema,
+      }),
     ],
     handler: handlers.updateTask,
   });

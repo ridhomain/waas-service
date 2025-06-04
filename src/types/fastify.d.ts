@@ -20,10 +20,10 @@ declare module 'fastify' {
     jsm: JetStreamManager;
     requestAgentEvent: (action: string, subject: string, payload: any) => Promise<any>;
     publishEvent: (subject: string, data: any) => Promise<void>;
-    
+
     // Auth
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
-    
+
     // MongoDB
     mongo: {
       db: Db;
@@ -35,13 +35,13 @@ declare module 'fastify' {
       query: (text: string, values?: any[]) => Promise<any>;
       pool: any;
     };
-    
+
     // Repositories
     taskRepository: TaskRepository;
-    
+
     // Agenda
     agenda: Agenda;
-    
+
     // Zod Validation
     zodValidate: (schemas: {
       body?: ZodSchema;
@@ -49,7 +49,7 @@ declare module 'fastify' {
       params?: ZodSchema;
       headers?: ZodSchema;
     }) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
-    
+
     // Config
     config: {
       PORT: number;
@@ -58,7 +58,7 @@ declare module 'fastify' {
       POSTGRES_DSN: string;
       SECRET_KEY: string;
       NODE_ENV?: string;
-      POST
+      POST;
     };
   }
 }

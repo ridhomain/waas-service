@@ -9,6 +9,8 @@ export type TaskType = 'chat' | 'broadcast' | 'mailcast';
 // Updated: TaskAgent represents which agent/system sends the message
 export type TaskAgent = 'DAISI' | 'META';
 
+export type TaskMetadata = any;
+
 export interface Task {
   _id?: ObjectId;
   companyId: string;
@@ -22,6 +24,7 @@ export interface Task {
   label?: string;
   taskType: TaskType;
   taskAgent: TaskAgent;
+  metadata?: TaskMetadata;
   status: TaskStatus;
   errorReason?: string;
   jobName?: string;
@@ -40,8 +43,8 @@ export interface TaskResponse extends Omit<Task, '_id'> {
 
 export interface TaskFilters {
   status?: TaskStatus;
-  taskType?: TaskType;    // Updated from 'channel' to 'taskType'
-  taskAgent?: TaskAgent;  // Updated from 'channel' to 'taskAgent'
+  taskType?: TaskType; // Updated from 'channel' to 'taskType'
+  taskAgent?: TaskAgent; // Updated from 'channel' to 'taskAgent'
   agentId?: string;
   label?: string;
   scheduledBefore?: Date;

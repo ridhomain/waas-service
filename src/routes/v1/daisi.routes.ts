@@ -7,6 +7,7 @@ import {
   DaisiSendGroupMessageSchema,
   DaisiMarkAsReadSchema,
   DaisiLogoutSchema,
+  DaisiDownloadMediaSchema,
 } from '../../schemas/zod-schemas';
 
 const daisiRoutes: FastifyPluginAsync = async (fastify) => {
@@ -14,7 +15,7 @@ const daisiRoutes: FastifyPluginAsync = async (fastify) => {
     taskRepository: fastify.taskRepository,
     agenda: fastify.agenda,
     requestAgentEvent: fastify.requestAgentEvent,
-    log: fastify.log
+    log: fastify.log,
   });
 
   fastify.post('/daisi/send-message', {
@@ -35,6 +36,11 @@ const daisiRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/daisi/logout', {
     preHandler: [fastify.zodValidate({ body: DaisiLogoutSchema })],
     handler: handlers.logout,
+  });
+
+  fastify.post('/daisi/download-media', {
+    preHandler: [fastify.zodValidate({ body: DaisiDownloadMediaSchema })],
+    handler: handlers.downloadMedia,
   });
 };
 

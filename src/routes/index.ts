@@ -18,7 +18,7 @@ const apiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
     async (fastify: FastifyInstance) => {
       // Add authentication hook
       fastify.addHook('preHandler', fastify.authenticate);
-      
+
       // Register routes
       await fastify.register(metaRoutes);
       await fastify.register(daisiRoutes);

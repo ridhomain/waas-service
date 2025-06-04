@@ -177,12 +177,10 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
 
       const { agentId, taskAgent, limit = 20, skip = 0 } = request.query;
 
-      const tasks = await taskRepository.findChatTasks(
-        companyId,
-        agentId,
-        taskAgent,
-        { limit: Number(limit), skip: Number(skip) }
-      );
+      const tasks = await taskRepository.findChatTasks(companyId, agentId, taskAgent, {
+        limit: Number(limit),
+        skip: Number(skip),
+      });
 
       const transformedTasks = tasks.map((task) => ({
         ...task,
@@ -209,12 +207,10 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
 
       const { agentId, taskAgent, limit = 20, skip = 0 } = request.query;
 
-      const tasks = await taskRepository.findBroadcastTasks(
-        companyId,
-        agentId,
-        taskAgent,
-        { limit: Number(limit), skip: Number(skip) }
-      );
+      const tasks = await taskRepository.findBroadcastTasks(companyId, agentId, taskAgent, {
+        limit: Number(limit),
+        skip: Number(skip),
+      });
 
       const transformedTasks = tasks.map((task) => ({
         ...task,
@@ -241,12 +237,10 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
 
       const { agentId, taskAgent, limit = 20, skip = 0 } = request.query;
 
-      const tasks = await taskRepository.findMailcastTasks(
-        companyId,
-        agentId,
-        taskAgent,
-        { limit: Number(limit), skip: Number(skip) }
-      );
+      const tasks = await taskRepository.findMailcastTasks(companyId, agentId, taskAgent, {
+        limit: Number(limit),
+        skip: Number(skip),
+      });
 
       const transformedTasks = tasks.map((task) => ({
         ...task,
@@ -261,10 +255,7 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
     }
   };
 
-  const getTaskStats = async (
-    request: FastifyRequest,
-    reply: FastifyReply
-  ) => {
+  const getTaskStats = async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const companyId = request.user?.company;
       if (!companyId) {
