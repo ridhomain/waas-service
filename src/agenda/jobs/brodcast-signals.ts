@@ -45,7 +45,7 @@ export const defineBroadcastSignalJobs = (
       }
 
       // Send start signal to agent
-      await fastify.publishEvent(`v1.broadcast.control.${agentId}`, {
+      await fastify.publishEvent(`v1.agents.${agentId}`, {
         action: 'START_BROADCAST',
         batchId,
         companyId,

@@ -1,5 +1,5 @@
 // src/utils/task.utils.ts
-import { Task, TaskAgent, TaskType } from '../models/task';
+import { Task, TaskAgent, TaskMetadata, TaskType } from '../models/task';
 import { DaisiSendMessageInput, DaisiSendGroupMessageInput, MailcastSendMessageInput, MetaSendMessageInput } from '../schemas/zod-schemas';
 
 const createBaseTaskPayload = (
@@ -57,6 +57,7 @@ export const createDaisiBroadcastTaskPayload = (
     label?: string;
     scheduledAt?: Date;
     batchId?: string;
+    metadata?: TaskMetadata;
   },
   jobName?: string
 ): Omit<Task, '_id' | 'createdAt' | 'updatedAt'> => ({

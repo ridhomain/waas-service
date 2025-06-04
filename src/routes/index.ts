@@ -7,7 +7,7 @@ import metaRoutes from './v1/meta.routes';
 import daisiRoutes from './v1/daisi.routes';
 import mailcastRoutes from './v1/mailcast.routes';
 import taskRoutes from './v1/task.routes';
-// import broadcastRoutes from './v1/broadcast.routes';
+import broadcastRoutes from './v1/broadcast.routes';
 
 const apiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
   // Public routes
@@ -24,7 +24,7 @@ const apiRoutes: FastifyPluginAsync = async (fastify: FastifyInstance) => {
       await fastify.register(daisiRoutes);
       await fastify.register(mailcastRoutes);
       await fastify.register(taskRoutes);
-      // await fastify.register(broadcastRoutes);
+      await fastify.register(broadcastRoutes);
     },
     { prefix: '/api/v1' }
   );

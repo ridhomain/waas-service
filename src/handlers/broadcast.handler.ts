@@ -9,7 +9,6 @@ import { validateMessageType } from '../utils/validators';
 import { createDaisiBroadcastTaskPayload } from '../utils/task.utils';
 import {
   BroadcastByTagsInput,
-  BroadcastByPhonesInput,
   BroadcastPreviewInput,
   CancelBroadcastInput,
   BroadcastStatusInput,
@@ -117,6 +116,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
           label,
           scheduledAt,
           batchId,
+          metadata: broadcastMeta
         }, 'broadcast-task')
       );
 
@@ -199,156 +199,6 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         status: 'started' as const,
         batchId,
         total: contacts.length,
-        taskAgent,
-      }, 201);
-    } catch (error) {
-      const appError = handleError(error);
-      return sendError(reply, appError);
-    }
-  };
-
-  const broadcastByPhones = async (
-    request: FastifyRequest<{ Body: BroadcastByPhonesInput }>,
-    reply: FastifyReply
-  ) => {
-    try {
-      const payload = request.body;
-      const userCompany = request.user?.company;
-
-      if (payload.companyId !== userCompany) {
-        throw forbidden('Unauthorized company access');
-      }
-
-      // Validate message type
-      const validationError = validateMessageType(payload.type, payload.message);
-      if (validationError) {
-        throw badRequest(validationError, 'INVALID_MESSAGE_TYPE');
-      }
-
-      const { agentId, phones, message, schedule, label, userId, variables, options } = payload;
-      const batchId = nanoid();
-      const scheduledAt = schedule ? new Date(schedule) : new Date();
-
-      // Validate broadcast schedule
-      await validateBroadcastSchedule(taskRepository, agentId, scheduledAt);
-
-      // Process phone numbers (exclude groups)
-      const phoneList = phones.split(',')
-        .map(p => (p.trim()))
-
-      const uniquePhones = [...new Set(phoneList)];
-
-      if (uniquePhones.length === 0) {
-        throw badRequest('No valid phone numbers provided', 'NO_PHONES');
-      }
-
-      // Extract template variables
-      const templateVariables = extractVariableNames(message);
-
-      // Determine task agent (DAISI by default, could be configured per agent/company)
-      const taskAgent: TaskAgent = 'DAISI'; // TODO: Make this configurable
-
-      // Store broadcast metadata
-      const broadcastMeta: BroadcastMeta = {
-        createdBy: userId,
-        createdAt: new Date(),
-        scheduledAt,
-        totalRecipients: uniquePhones.length,
-        phones: uniquePhones.slice(0, 10), // Store sample
-        channel: 'broadcast-by-phones',
-        taskAgent,
-        template: templateVariables.length > 0 ? {
-          variables: templateVariables
-        } : undefined,
-      };
-
-      // Create tasks using new task structure
-      const tasksToCreate = uniquePhones.map((phone, idx) =>
-        createDaisiBroadcastTaskPayload(userCompany, {
-          agentId,
-          phoneNumber: phone,
-          message,
-          options: options || {},
-          variables: variables || {},
-          userId,
-          label,
-          scheduledAt,
-          batchId,
-        }, 'broadcast-task')
-      );
-
-      const taskIds = await taskRepository.createMany(tasksToCreate);
-
-      // Store state in KV
-      const kv = await js.views.kv(`broadcast_state`);
-      await kv.put(`${agentId}_${batchId}`, sc.encode(JSON.stringify({
-        status: 'SCHEDULED',
-        batchId,
-        agentId,
-        companyId: userCompany,
-        taskAgent,
-        total: uniquePhones.length,
-        processed: 0,
-        completed: 0,
-        failed: 0,
-        createdAt: new Date(),
-        scheduledAt,
-      })));
-
-      // Publish tasks to stream
-      const subject = `v1.broadcasts.${agentId}`;
-      const h = headers();
-      h.append('Batch-Id', batchId);
-      h.append('Agent-Id', agentId);
-      h.append('Company', userCompany);
-
-      for (let i = 0; i < taskIds.length; i++) {
-        await js.publish(subject, sc.encode(JSON.stringify({
-          taskId: taskIds[i],
-          batchId,
-          phoneNumber: uniquePhones[i],
-          message,
-          options: options || {},
-          variables: variables || {},
-          label,
-          taskAgent,
-          contact: {
-            phone: uniquePhones[i],
-            // Limited data for phone-based broadcasts
-          }
-        })), {
-          headers: h
-        });
-      }
-
-      // Schedule or start
-      const jobData = {
-        batchId,
-        companyId: userCompany,
-        agentId,
-        taskAgent,
-        total: uniquePhones.length,
-      };
-
-      if (schedule) {
-        const job = await agenda.schedule(schedule, 'signal-broadcast-start', jobData);
-
-        return sendSuccess(reply, {
-          status: 'scheduled' as const,
-          batchId,
-          total: uniquePhones.length,
-          scheduleAt: schedule,
-          jobId: job.attrs._id?.toString(),
-          taskAgent,
-        }, 201);
-      }
-
-      await agenda.now('signal-broadcast-start', jobData);
-
-      return sendSuccess(reply, {
-        status: 'started' as const,
-        batchId,
-        total: uniquePhones.length,
         taskAgent,
       }, 201);
     } catch (error) {
@@ -549,7 +399,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
       }
 
       // Send cancel signal to agent
-      await publishEvent(`v1.broadcast.control.${agentId}`, {
+      await publishEvent(`v1.agents.${agentId}`, {
         action: 'CANCEL_BROADCAST',
         batchId,
         taskAgent,
@@ -571,7 +421,6 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
 
   return {
     broadcastByTags,
-    broadcastByPhones,
     previewBroadcast,
     getBroadcastStatus,
     cancelBroadcast,

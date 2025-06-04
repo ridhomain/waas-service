@@ -185,11 +185,6 @@ export const BroadcastByTagsSchema = BaseBroadcastSchema.extend({
   schedule: DateTimeSchema.optional(),
 });
 
-export const BroadcastByPhonesSchema = BaseBroadcastSchema.extend({
-  phones: z.string().min(1, 'Phone numbers are required'),
-  schedule: DateTimeSchema.optional(),
-});
-
 export const BroadcastPreviewSchema = z
   .object({
     companyId: CompanyIdSchema,
@@ -238,7 +233,6 @@ export type MetaSendMessageInput = z.infer<typeof MetaSendMessageSchema>;
 export type TaskFiltersInput = z.infer<typeof TaskFiltersSchema>;
 export type TaskUpdateInput = z.infer<typeof TaskUpdateSchema>;
 export type BroadcastByTagsInput = z.infer<typeof BroadcastByTagsSchema>;
-export type BroadcastByPhonesInput = z.infer<typeof BroadcastByPhonesSchema>;
 export type BroadcastPreviewInput = z.infer<typeof BroadcastPreviewSchema>;
 export type BroadcastStatusInput = z.infer<typeof BroadcastStatusSchema>;
 export type CancelBroadcastInput = z.infer<typeof CancelBroadcastSchema>;
