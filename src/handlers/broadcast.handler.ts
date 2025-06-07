@@ -554,24 +554,20 @@ async function getContactsByTags(params: {
 }): Promise<Array<{ phone_number: string }>> {
   const { pg, companyId, agentId, tags } = params;
 
-  // Build tag query with JSONB operators - ALL tags must be present (AND condition)
-  const tagConditions = tags.map((_, idx) => `tags @> $${idx + 2}::jsonb`).join(' AND ');
-
-  // Properly format schema and table name with quotes
   const schemaName = `daisi_${companyId}`;
   const tableName = `"${schemaName}"."contacts"`;
 
   const query = `
     SELECT DISTINCT phone_number
-    FROM ${tableName} 
-    WHERE agent_id = $1 
-      AND (${tagConditions})
+    FROM ${tableName}
+    WHERE agent_id = $1
+    AND string_to_array(tags, ',') && $2::text[]
       AND LENGTH(phone_number) >= 10
       AND LENGTH(phone_number) <= 15
     ORDER BY phone_number
   `;
 
-  const values = [agentId, ...tags.map((tag) => JSON.stringify([tag]))];
+  const values = [agentId, tags];
 
   const result = await pg.query(query, values);
   return result.rows;
