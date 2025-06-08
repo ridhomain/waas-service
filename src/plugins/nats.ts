@@ -71,7 +71,7 @@ const natsPlugin: FastifyPluginAsync = async (fastify) => {
     action: string,
     subject: string,
     payload: any,
-    timeout = 3000
+    timeout = 10000
   ) => {
     const data = {
       action,

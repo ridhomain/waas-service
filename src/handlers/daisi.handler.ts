@@ -2,9 +2,8 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { Agenda } from '@hokify/agenda';
 import { TaskRepository } from '../repositories/task.repository';
-import { createError, forbidden, badRequest, handleError } from '../utils/errors';
+import { createError, forbidden, handleError } from '../utils/errors';
 import { sendSuccess, sendError } from '../utils/response';
-import { validateMessageType } from '../utils/validators';
 import { createDaisiChatTaskPayload } from '../utils/task.utils';
 import {
   DaisiSendMessageInput,
@@ -31,7 +30,6 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
     try {
       const payload = request.body;
       const userCompany = request.user?.company;
-      console.log('Raw request body:', JSON.stringify(request.body, null, 2));
 
       // Validate company authorization
       if (payload.companyId !== userCompany) {
@@ -40,12 +38,6 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
 
       log.info('message type: %o', payload.type);
       log.info('message: %o', payload.message);
-
-      // Validate message type
-      const validationError = validateMessageType(payload.type, payload.message);
-      if (validationError) {
-        throw badRequest(validationError, 'INVALID_MESSAGE_TYPE');
-      }
 
       // Create task using the new specific function (taskType: 'chat', taskAgent: 'DAISI')
       const taskPayload = createDaisiChatTaskPayload(
@@ -122,11 +114,6 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
 
       if (payload.companyId !== userCompany) {
         throw forbidden('Unauthorized company access');
-      }
-
-      const validationError = validateMessageType(payload.type, payload.message);
-      if (validationError) {
-        throw badRequest(validationError, 'INVALID_MESSAGE_TYPE');
       }
 
       // Create task using the new specific function (taskType: 'chat', taskAgent: 'DAISI')

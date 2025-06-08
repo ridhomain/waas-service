@@ -5,7 +5,6 @@ import { TaskRepository } from '../repositories/task.repository';
 import { nanoid } from '../utils';
 import { forbidden, badRequest, handleError, conflict } from '../utils/errors';
 import { sendSuccess, sendError } from '../utils/response';
-import { validateMessageType } from '../utils/validators';
 import { createDaisiBroadcastTaskPayload } from '../utils/task.utils';
 import {
   BroadcastByTagsInput,
@@ -51,12 +50,6 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
 
       if (payload.companyId !== userCompany) {
         throw forbidden('Unauthorized company access');
-      }
-
-      // Validate message type
-      const validationError = validateMessageType(payload.type, payload.message);
-      if (validationError) {
-        throw badRequest(validationError, 'INVALID_MESSAGE_TYPE');
       }
 
       const { agentId, tags, message, schedule, label, userId, variables, options } = payload;

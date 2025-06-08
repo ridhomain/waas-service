@@ -3,9 +3,8 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { Agenda } from '@hokify/agenda';
 import { TaskRepository } from '../repositories/task.repository';
 import { MailcastSendMessageInput } from '../schemas/zod-schemas';
-import { forbidden, badRequest, handleError, internalError } from '../utils/errors';
+import { forbidden, handleError, internalError } from '../utils/errors';
 import { sendSuccess, sendError } from '../utils/response';
-import { validateMessageType } from '../utils/validators';
 import { createMailcastTaskPayload } from '../utils/task.utils';
 
 export interface MailcastHandlerDeps {
@@ -31,14 +30,8 @@ export const createMailcastHandlers = (deps: MailcastHandlerDeps) => {
         throw forbidden('Unauthorized company access');
       }
 
-      const { type, message, agentId, scheduleAt, companyId } = payload;
+      const { agentId, scheduleAt, companyId } = payload;
       const subject = `v1.mailcasts.${agentId}`;
-
-      // Validate message type
-      const validationError = validateMessageType(type, message);
-      if (validationError) {
-        throw badRequest(validationError, 'INVALID_MESSAGE_TYPE');
-      }
 
       // Create task using the new specific function (taskType: 'mailcast', taskAgent: 'DAISI' by default)
       // Note: taskAgent can be configured per company/agent basis in the future

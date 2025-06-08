@@ -53,18 +53,17 @@ export const DocumentMessageSchema = z.object({
   caption: z.string().optional(),
 });
 
+// Keep the union for backward compatibility
 export const BaileysMessageSchema = z.union([
   DocumentMessageSchema,
   ImageMessageSchema,
   TextMessageSchema,
 ]);
 
-// Common fields
-export const BaseMessageSchema = z.object({
+// Common fields for all message schemas
+const BaseFieldsSchema = z.object({
   companyId: CompanyIdSchema,
   agentId: AgentIdSchema,
-  type: z.enum(['text', 'image', 'document']),
-  message: BaileysMessageSchema,
   scheduleAt: DateTimeSchema.optional(),
   options: z.record(z.any()).optional(),
   variables: z.record(z.any()).optional(),
@@ -73,13 +72,41 @@ export const BaseMessageSchema = z.object({
 });
 
 // Daisi schemas (taskType: 'chat', taskAgent: 'DAISI')
-export const DaisiSendMessageSchema = BaseMessageSchema.extend({
-  phoneNumber: PhoneNumberSchema,
-});
+export const DaisiSendMessageSchema = z.discriminatedUnion('type', [
+  BaseFieldsSchema.extend({
+    type: z.literal('text'),
+    phoneNumber: PhoneNumberSchema,
+    message: TextMessageSchema,
+  }),
+  BaseFieldsSchema.extend({
+    type: z.literal('image'),
+    phoneNumber: PhoneNumberSchema,
+    message: ImageMessageSchema,
+  }),
+  BaseFieldsSchema.extend({
+    type: z.literal('document'),
+    phoneNumber: PhoneNumberSchema,
+    message: DocumentMessageSchema,
+  }),
+]);
 
-export const DaisiSendGroupMessageSchema = BaseMessageSchema.extend({
-  groupJid: z.string().min(1, 'Group JID is required'),
-});
+export const DaisiSendGroupMessageSchema = z.discriminatedUnion('type', [
+  BaseFieldsSchema.extend({
+    type: z.literal('text'),
+    groupJid: z.string().min(1, 'Group JID is required'),
+    message: TextMessageSchema,
+  }),
+  BaseFieldsSchema.extend({
+    type: z.literal('image'),
+    groupJid: z.string().min(1, 'Group JID is required'),
+    message: ImageMessageSchema,
+  }),
+  BaseFieldsSchema.extend({
+    type: z.literal('document'),
+    groupJid: z.string().min(1, 'Group JID is required'),
+    message: DocumentMessageSchema,
+  }),
+]);
 
 export const DaisiMarkAsReadSchema = z.object({
   companyId: CompanyIdSchema,
@@ -103,9 +130,23 @@ export const DaisiDownloadMediaSchema = z.object({
 });
 
 // Mailcast schemas (taskType: 'mailcast', taskAgent: determined by config)
-export const MailcastSendMessageSchema = BaseMessageSchema.extend({
-  phoneNumber: PhoneNumberSchema,
-});
+export const MailcastSendMessageSchema = z.discriminatedUnion('type', [
+  BaseFieldsSchema.extend({
+    type: z.literal('text'),
+    phoneNumber: PhoneNumberSchema,
+    message: TextMessageSchema,
+  }),
+  BaseFieldsSchema.extend({
+    type: z.literal('image'),
+    phoneNumber: PhoneNumberSchema,
+    message: ImageMessageSchema,
+  }),
+  BaseFieldsSchema.extend({
+    type: z.literal('document'),
+    phoneNumber: PhoneNumberSchema,
+    message: DocumentMessageSchema,
+  }),
+]);
 
 // Meta schemas (taskType: 'chat' or 'mailcast', taskAgent: 'META')
 export const MetaMessageContentSchema = z.object({
@@ -130,7 +171,7 @@ export const MetaSendMessageSchema = z.object({
   scheduleAt: DateTimeSchema.optional(),
 });
 
-// Task schemas - Updated with proper number handling for query params
+// Task schemas
 export const TaskFiltersSchema = z.object({
   status: z.enum(['PENDING', 'PROCESSING', 'COMPLETED', 'ERROR']).optional(),
   taskType: z.enum(['chat', 'broadcast', 'mailcast']).optional(),
@@ -138,7 +179,6 @@ export const TaskFiltersSchema = z.object({
   label: z.string().optional(),
   agentId: z.string().optional(),
   scheduledBefore: DateTimeSchema.optional(),
-  // Handle string-to-number conversion for query parameters
   limit: z
     .union([z.number(), stringToNumber])
     .refine((val) => val >= 1 && val <= 100, {
@@ -170,21 +210,26 @@ export const TaskUpdateSchema = z
   });
 
 // Broadcast schemas (taskType: 'broadcast')
-const BaseBroadcastSchema = z.object({
-  companyId: CompanyIdSchema,
-  agentId: AgentIdSchema,
-  type: z.enum(['text', 'image', 'document']),
-  message: BaileysMessageSchema,
-  options: z.record(z.any()).optional(),
-  variables: z.record(z.any()).optional(),
-  userId: z.string().optional(),
-  label: z.string().optional(),
-});
-
-export const BroadcastByTagsSchema = BaseBroadcastSchema.extend({
-  tags: z.string().min(1, 'Tags are required'),
-  schedule: DateTimeSchema.optional(),
-});
+export const BroadcastByTagsSchema = z.discriminatedUnion('type', [
+  BaseFieldsSchema.extend({
+    type: z.literal('text'),
+    tags: z.string().min(1, 'Tags are required'),
+    schedule: DateTimeSchema.optional(),
+    message: TextMessageSchema,
+  }),
+  BaseFieldsSchema.extend({
+    type: z.literal('image'),
+    tags: z.string().min(1, 'Tags are required'),
+    schedule: DateTimeSchema.optional(),
+    message: ImageMessageSchema,
+  }),
+  BaseFieldsSchema.extend({
+    type: z.literal('document'),
+    tags: z.string().min(1, 'Tags are required'),
+    schedule: DateTimeSchema.optional(),
+    message: DocumentMessageSchema,
+  }),
+]);
 
 export const BroadcastPreviewSchema = z
   .object({
@@ -205,7 +250,48 @@ export const CancelBroadcastSchema = z.object({
   batchId: z.string().min(1, 'Batch ID is required'),
 });
 
-// Task type-specific query schemas with proper number handling
+export const AgentScheduleItemSchema = z.object({
+  agentId: AgentIdSchema,
+  scheduleAt: DateTimeSchema, // Each agent can have its own schedule
+});
+
+export const MultiAgentBroadcastSchema = z.object({
+  companyId: CompanyIdSchema,
+  agents: z.array(AgentScheduleItemSchema)
+    .min(1, 'At least one agent is required')
+    .refine(
+      (agents) => {
+        const agentIds = agents.map(a => a.agentId);
+        const uniqueIds = new Set(agentIds);
+        return agentIds.length === uniqueIds.size;
+      },
+      { message: 'Duplicate agent IDs are not allowed' }
+    ),
+  tags: z.string().min(1, 'Tags are required'),
+  type: z.enum(['text', 'image', 'document']),
+  message: BaileysMessageSchema,
+  options: z.record(z.any()).optional(),
+  variables: z.record(z.any()).optional(),
+  userId: z.string().optional(),
+  label: z.string().optional(),
+});
+
+export const MultiAgentBroadcastPreviewSchema = z.object({
+  companyId: CompanyIdSchema,
+  agents: z.array(AgentScheduleItemSchema)
+    .min(1, 'At least one agent is required')
+    .refine(
+      (agents) => {
+        const agentIds = agents.map(a => a.agentId);
+        const uniqueIds = new Set(agentIds);
+        return agentIds.length === uniqueIds.size;
+      },
+      { message: 'Duplicate agent IDs are not allowed' }
+    ),
+  tags: z.string().min(1, 'Tags are required'),
+});
+
+// Task type-specific query schemas
 export const TaskTypeQuerySchema = z.object({
   agentId: z.string().optional(),
   taskAgent: z.enum(['DAISI', 'META']).optional(),
@@ -237,4 +323,6 @@ export type BroadcastByTagsInput = z.infer<typeof BroadcastByTagsSchema>;
 export type BroadcastPreviewInput = z.infer<typeof BroadcastPreviewSchema>;
 export type BroadcastStatusInput = z.infer<typeof BroadcastStatusSchema>;
 export type CancelBroadcastInput = z.infer<typeof CancelBroadcastSchema>;
+export type MultiAgentBroadcastInput = z.infer<typeof MultiAgentBroadcastSchema>;
+export type MultiAgentBroadcastPreviewInput = z.infer<typeof MultiAgentBroadcastPreviewSchema>;
 export type TaskTypeQueryInput = z.infer<typeof TaskTypeQuerySchema>;

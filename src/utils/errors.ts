@@ -26,7 +26,7 @@ export class AppError extends Error {
 }
 
 // Factory functions for common errors
-export const createError = (statusCode: number, message: string, code?: string, details?: any) => 
+export const createError = (statusCode: number, message: string, code?: string, details?: any) =>
   new AppError({ statusCode, message, code, details });
 
 export const badRequest = (message: string, code = 'BAD_REQUEST', details?: any) =>
@@ -44,8 +44,11 @@ export const notFound = (resource: string, code = 'NOT_FOUND') =>
 export const conflict = (message: string, code = 'CONFLICT', details?: any) =>
   createError(409, message, code, details);
 
-export const internalError = (message = 'Internal server error', code = 'INTERNAL_ERROR', details?: any) =>
-  createError(500, message, code, details);
+export const internalError = (
+  message = 'Internal server error',
+  code = 'INTERNAL_ERROR',
+  details?: any
+) => createError(500, message, code, details);
 
 // Error handler
 export const handleError = (error: unknown): AppError => {
@@ -53,7 +56,7 @@ export const handleError = (error: unknown): AppError => {
   if (error instanceof AppError) {
     return error;
   }
-  
+
   // MongoDB duplicate key error
   if (error instanceof Error && error.message.includes('E11000')) {
     return conflict('Resource already exists', 'DUPLICATE_KEY');
@@ -66,11 +69,7 @@ export const handleError = (error: unknown): AppError => {
       stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined,
     });
   }
-  
+
   // Unknown error
   return internalError('An unknown error occurred', 'UNKNOWN_ERROR');
 };
-
-// Validation error helper
-export const validationError = (errors: Record<string, string[]>) =>
-  badRequest('Validation failed', 'VALIDATION_ERROR', errors);
