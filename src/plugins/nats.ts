@@ -1,13 +1,22 @@
 // src/plugins/nats.ts (fixed dependencies)
-import { FastifyPluginAsync } from 'fastify';
+import { FastifyPluginAsync, FastifyInstance } from 'fastify';
 import fp from 'fastify-plugin';
-import { connect, StringCodec, JetStreamClient, JetStreamManager } from 'nats';
+import {
+  connect,
+  StringCodec,
+  JetStreamClient,
+  JetStreamManager,
+  RetentionPolicy,
+  StorageType,
+  DiscardPolicy,
+  KV,
+} from 'nats';
 
 const natsPlugin: FastifyPluginAsync = async (fastify) => {
   const nc = await connect({
     servers: fastify.config.NATS_URL,
-    user: "admin",
-    pass: "admin",
+    user: 'admin',
+    pass: 'admin',
     name: `daisi-whatsapp-service-${process.pid}`,
     reconnect: true,
     maxReconnectAttempts: 5,
@@ -54,13 +63,21 @@ const natsPlugin: FastifyPluginAsync = async (fastify) => {
   const jsm: JetStreamManager = await nc.jetstreamManager();
   const sc = StringCodec();
 
+  // Initialize NATS resources (stream and KV)
+  await initializeNATSResources(js, jsm, fastify);
+
   // utils functions
-  const requestAgentEvent = async (action: string, subject: string, payload: any, timeout = 3000) => {
+  const requestAgentEvent = async (
+    action: string,
+    subject: string,
+    payload: any,
+    timeout = 3000
+  ) => {
     const data = {
       action,
-      payload
+      payload,
     };
-  
+
     const encoded = sc.encode(JSON.stringify(data));
 
     try {
@@ -70,7 +87,13 @@ const natsPlugin: FastifyPluginAsync = async (fastify) => {
       const result = JSON.parse(decoded);
       return result;
     } catch (err: any) {
-      throw new Error(`[NATS Request] Failed for ${subject}: ${err.message || err}`);
+      return {
+        success: false,
+        error:
+          err.message.includes('timeout') || err.message.includes('no responders')
+            ? 'Agent is offline or not responding'
+            : err.message,
+      };
     }
   };
 
@@ -85,7 +108,7 @@ const natsPlugin: FastifyPluginAsync = async (fastify) => {
       fastify.log.error(`[NATS] Error publishing to ${subject}. error: %o`, err);
     }
   };
-    
+
   fastify.decorate('nats', nc);
   fastify.decorate('js', js);
   fastify.decorate('jsm', jsm);
@@ -102,3 +125,95 @@ export default fp(natsPlugin, {
   name: 'nats',
   dependencies: ['env'], // Added explicit dependency
 });
+
+async function initializeNATSResources(
+  js: JetStreamClient,
+  jsm: JetStreamManager,
+  fastify: FastifyInstance
+): Promise<void> {
+  // Create stream
+  await ensureAgentDurableStream(jsm, fastify);
+
+  // Create KV store and decorate fastify with it
+  const kv = await ensureBroadcastStateKV(js, fastify);
+  fastify.decorate('broadcastStateKV', kv);
+
+  fastify.log.info('[NATS] All NATS resources initialized successfully');
+}
+
+// Stream creation function
+async function ensureAgentDurableStream(
+  jsm: JetStreamManager,
+  fastify: FastifyInstance
+): Promise<void> {
+  const streamName = 'agent_durable_stream';
+
+  try {
+    const streamInfo = await jsm.streams.info(streamName);
+    fastify.log.info(`[NATS] Stream "${streamName}" already exists`, {
+      messages: streamInfo.state.messages,
+      bytes: streamInfo.state.bytes,
+      consumer_count: streamInfo.state.consumer_count,
+    });
+  } catch (err: any) {
+    if (err.message.includes('stream not found')) {
+      await jsm.streams.add({
+        name: streamName,
+        subjects: ['v1.broadcasts.*', 'v1.mailcasts.*'],
+        retention: RetentionPolicy.Limits,
+        max_age: 3 * 24 * 60 * 60 * 1_000_000_000, // 3 days in nanoseconds
+        max_bytes: 1024 * 1024 * 1024, // 1GB
+        max_msgs: 1000000, // 1 million messages max
+        storage: StorageType.File,
+        discard: DiscardPolicy.Old,
+        duplicate_window: 60 * 1_000_000_000, // 1 minute deduplication window
+        description: 'Durable stream for agent broadcast and mailcast messages',
+      });
+
+      fastify.log.info(`[NATS] Stream "${streamName}" created successfully`, {
+        subjects: ['v1.broadcasts.*', 'v1.mailcasts.*'],
+        retention: '3 days',
+        max_size: '1GB',
+      });
+    } else {
+      throw err;
+    }
+  }
+}
+
+// KV store creation function
+async function ensureBroadcastStateKV(js: JetStreamClient, fastify: FastifyInstance): Promise<KV> {
+  const kvName = 'broadcast_state';
+
+  try {
+    const kv = await js.views.kv(kvName);
+    const status = await kv.status();
+
+    fastify.log.info('[NATS] Connected to existing broadcast_state KV', {
+      bucket: status.bucket,
+      values: status.values,
+      history: status.history,
+      ttl: status.ttl,
+    });
+
+    return kv;
+  } catch (err: any) {
+    if (err.message.includes('bucket not found')) {
+      const kv = await js.views.kv(kvName, {
+        history: 5,
+        ttl: 7 * 24 * 60 * 60 * 1000, // 7 days TTL in milliseconds
+        description: 'Broadcast state tracking for agent APIs',
+      });
+
+      fastify.log.info(`[NATS] Created broadcast_state KV store`, {
+        name: kvName,
+        ttl: '7 days',
+        history: 5,
+      });
+
+      return kv;
+    } else {
+      throw err;
+    }
+  }
+}

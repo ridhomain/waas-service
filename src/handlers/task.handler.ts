@@ -147,9 +147,9 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
         updates.status = payload.status as TaskStatus;
       }
 
-      if (payload.label !== undefined) {
-        updates.label = payload.label;
-      }
+      // if (payload.label !== undefined) {
+      //   updates.label = payload.label;
+      // }
 
       const updated = await taskRepository.update(id, updates);
 

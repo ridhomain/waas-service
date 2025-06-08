@@ -18,11 +18,11 @@ export interface DaisiHandlerDeps {
   taskRepository: TaskRepository;
   agenda: Agenda;
   requestAgentEvent: (action: string, subject: string, payload: any) => Promise<any>;
-  log: any; // Fastify logger
+  log: any;
 }
 
 export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
-  const { taskRepository, agenda, requestAgentEvent, log } = deps;
+  const { taskRepository, requestAgentEvent, log } = deps;
 
   const sendMessage = async (
     request: FastifyRequest<{ Body: DaisiSendMessageInput }>,
@@ -31,11 +31,15 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
     try {
       const payload = request.body;
       const userCompany = request.user?.company;
+      console.log('Raw request body:', JSON.stringify(request.body, null, 2));
 
       // Validate company authorization
       if (payload.companyId !== userCompany) {
         throw forbidden('Unauthorized company access');
       }
+
+      log.info('message type: %o', payload.type);
+      log.info('message: %o', payload.message);
 
       // Validate message type
       const validationError = validateMessageType(payload.type, payload.message);
@@ -52,27 +56,27 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
       const taskId = await taskRepository.create(taskPayload);
 
       // Handle scheduled messages
-      if (payload.scheduleAt) {
-        const job = await agenda.schedule(payload.scheduleAt, 'send-daisi-message', {
-          ...payload,
-          taskId,
-        });
+      // if (payload.scheduleAt) {
+      //   const job = await agenda.schedule(payload.scheduleAt, 'send-daisi-message', {
+      //     ...payload,
+      //     taskId,
+      //   });
 
-        const jobId = job.attrs._id;
-        if (jobId) {
-          await taskRepository.update(taskId, {
-            agendaJobId: jobId.toString(),
-          });
-        } else {
-          log.warn({ taskId }, 'Agenda job created without ID');
-        }
+      //   const jobId = job.attrs._id;
+      //   if (jobId) {
+      //     await taskRepository.update(taskId, {
+      //       agendaJobId: jobId.toString(),
+      //     });
+      //   } else {
+      //     log.warn({ taskId }, 'Agenda job created without ID');
+      //   }
 
-        return sendSuccess(reply, {
-          status: 'scheduled' as const,
-          taskId,
-          scheduleAt: payload.scheduleAt,
-        });
-      }
+      //   return sendSuccess(reply, {
+      //     status: 'scheduled' as const,
+      //     taskId,
+      //     scheduleAt: payload.scheduleAt,
+      //   });
+      // }
 
       // Send immediately
       await taskRepository.update(taskId, { status: 'PROCESSING' });
@@ -133,27 +137,27 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
       );
       const taskId = await taskRepository.create(taskPayload);
 
-      if (payload.scheduleAt) {
-        const job = await agenda.schedule(payload.scheduleAt, 'send-daisi-message', {
-          ...payload,
-          taskId,
-        });
+      // if (payload.scheduleAt) {
+      //   const job = await agenda.schedule(payload.scheduleAt, 'send-daisi-message', {
+      //     ...payload,
+      //     taskId,
+      //   });
 
-        const jobId = job.attrs._id;
-        if (jobId) {
-          await taskRepository.update(taskId, {
-            agendaJobId: jobId.toString(),
-          });
-        } else {
-          log.warn({ taskId }, 'Agenda job created without ID');
-        }
+      //   const jobId = job.attrs._id;
+      //   if (jobId) {
+      //     await taskRepository.update(taskId, {
+      //       agendaJobId: jobId.toString(),
+      //     });
+      //   } else {
+      //     log.warn({ taskId }, 'Agenda job created without ID');
+      //   }
 
-        return sendSuccess(reply, {
-          status: 'scheduled' as const,
-          taskId,
-          scheduleAt: payload.scheduleAt,
-        });
-      }
+      //   return sendSuccess(reply, {
+      //     status: 'scheduled' as const,
+      //     taskId,
+      //     scheduleAt: payload.scheduleAt,
+      //   });
+      // }
 
       await taskRepository.update(taskId, { status: 'PROCESSING' });
 
@@ -227,7 +231,7 @@ export const createDaisiHandlers = (deps: DaisiHandlerDeps) => {
       }
 
       const subject = `v1.agents.${payload.agentId}`;
-      const result = await requestAgentEvent('LOGOUT', subject, {});
+      const result = await requestAgentEvent('LOGOUT', subject, { agentId: payload.agentId });
 
       if (!result?.success) {
         throw createError(500, result?.error || 'Logout failed', 'AGENT_ERROR');

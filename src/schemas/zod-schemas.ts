@@ -54,9 +54,9 @@ export const DocumentMessageSchema = z.object({
 });
 
 export const BaileysMessageSchema = z.union([
-  TextMessageSchema,
-  ImageMessageSchema,
   DocumentMessageSchema,
+  ImageMessageSchema,
+  TextMessageSchema,
 ]);
 
 // Common fields
@@ -162,7 +162,8 @@ export const TaskFiltersSchema = z.object({
 export const TaskUpdateSchema = z
   .object({
     status: z.enum(['PENDING', 'PROCESSING', 'COMPLETED', 'ERROR']).optional(),
-    label: z.string().optional(),
+    finishedAt: z.date().optional(),
+    errorReason: z.string().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'At least one field must be provided for update',

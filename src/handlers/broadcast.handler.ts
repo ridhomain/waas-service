@@ -554,7 +554,7 @@ async function getContactsByTags(params: {
 }): Promise<Array<{ phone_number: string }>> {
   const { pg, companyId, agentId, tags } = params;
 
-  const schemaName = `daisi_${companyId}`;
+  const schemaName = `daisi_${companyId.toLowerCase()}`;
   const tableName = `"${schemaName}"."contacts"`;
 
   const query = `

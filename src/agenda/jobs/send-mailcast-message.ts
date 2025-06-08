@@ -14,7 +14,7 @@ export const defineSendMailcastMessageJob = (agenda: Agenda, fastify: FastifyIns
       }
 
       const { agentId, taskId } = payload;
-      const subject = `v1.mailcast.${agentId}`;
+      const subject = `v1.mailcasts.${agentId}`;
 
       try {
         if (taskId) {
