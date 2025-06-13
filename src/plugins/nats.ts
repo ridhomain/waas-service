@@ -1,4 +1,4 @@
-// src/plugins/nats.ts (fixed dependencies)
+// src/plugins/nats.ts (with DLQ stream support)
 import { FastifyPluginAsync, FastifyInstance } from 'fastify';
 import fp from 'fastify-plugin';
 import {
@@ -63,7 +63,7 @@ const natsPlugin: FastifyPluginAsync = async (fastify) => {
   const jsm: JetStreamManager = await nc.jetstreamManager();
   const sc = StringCodec();
 
-  // Initialize NATS resources (stream and KV)
+  // Initialize NATS resources (streams and KV)
   await initializeNATSResources(js, jsm, fastify);
 
   // utils functions
@@ -131,8 +131,11 @@ async function initializeNATSResources(
   jsm: JetStreamManager,
   fastify: FastifyInstance
 ): Promise<void> {
-  // Create stream
+  // Create main stream
   await ensureAgentDurableStream(jsm, fastify);
+
+  // Create DLQ stream
+  // await ensureDLQTasksStream(jsm, fastify);
 
   // Create KV store and decorate fastify with it
   const kv = await ensureBroadcastStateKV(js, fastify);
@@ -141,7 +144,7 @@ async function initializeNATSResources(
   fastify.log.info('[NATS] All NATS resources initialized successfully');
 }
 
-// Stream creation function
+// Main stream creation function
 async function ensureAgentDurableStream(
   jsm: JetStreamManager,
   fastify: FastifyInstance
@@ -180,6 +183,46 @@ async function ensureAgentDurableStream(
     }
   }
 }
+
+// DLQ stream creation function
+// async function ensureDLQTasksStream(
+//   jsm: JetStreamManager,
+//   fastify: FastifyInstance
+// ): Promise<void> {
+//   const streamName = 'dlq_tasks_stream';
+
+//   try {
+//     const streamInfo = await jsm.streams.info(streamName);
+//     fastify.log.info(`[NATS] Stream "${streamName}" already exists`, {
+//       messages: streamInfo.state.messages,
+//       bytes: streamInfo.state.bytes,
+//       consumer_count: streamInfo.state.consumer_count,
+//     });
+//   } catch (err: any) {
+//     if (err.message.includes('stream not found')) {
+//       await jsm.streams.add({
+//         name: streamName,
+//         subjects: ['v1.dlqtasks.broadcasts.*', 'v1.dlqtasks.mailcasts.*'],
+//         retention: RetentionPolicy.Limits,
+//         max_age: 7 * 24 * 60 * 60 * 1_000_000_000, // 7 days in nanoseconds
+//         max_bytes: 5 * 1024 * 1024 * 1024, // 5GB
+//         max_msgs: 5000000, // 5 million messages max
+//         storage: StorageType.File,
+//         discard: DiscardPolicy.Old,
+//         duplicate_window: 60 * 1_000_000_000, // 1 minute deduplication window
+//         description: 'Dead Letter Queue stream for failed broadcast and mailcast tasks',
+//       });
+
+//       fastify.log.info(`[NATS] Stream "${streamName}" created successfully`, {
+//         subjects: ['v1.dlqtasks.broadcasts.*', 'v1.dlqtasks.mailcasts.*'],
+//         retention: '7 days',
+//         max_size: '5GB',
+//       });
+//     } else {
+//       throw err;
+//     }
+//   }
+// }
 
 // KV store creation function
 async function ensureBroadcastStateKV(js: JetStreamClient, fastify: FastifyInstance): Promise<KV> {

@@ -5,7 +5,7 @@ import { Agenda, Job } from '@hokify/agenda';
 import { setupAgendaJobs } from '../agenda';
 
 const agendaPlugin: FastifyPluginAsync = async (fastify) => {
-  const agenda = new Agenda({ 
+  const agenda = new Agenda({
     db: { address: fastify.config.MONGODB_DSN },
     processEvery: '30 seconds',
     maxConcurrency: 20,
@@ -24,7 +24,7 @@ const agendaPlugin: FastifyPluginAsync = async (fastify) => {
   // Start agenda
   await agenda.start();
   fastify.log.info('Agenda started successfully');
-  
+
   // Setup job definitions
   setupAgendaJobs(agenda, fastify);
 
@@ -34,39 +34,39 @@ const agendaPlugin: FastifyPluginAsync = async (fastify) => {
   // Job lifecycle logging
   agenda.on('start', (job) => {
     fastify.log.info(
-      { 
-        jobName: job.attrs.name, 
+      {
+        jobName: job.attrs.name,
         jobId: job.attrs._id,
-        data: job.attrs.data 
-      }, 
+        data: job.attrs.data,
+      },
       'Job started'
     );
   });
 
   agenda.on('success', (job) => {
     fastify.log.info(
-      { 
-        jobName: job.attrs.name, 
+      {
+        jobName: job.attrs.name,
         jobId: job.attrs._id,
-        result: (job.attrs as any).result 
-      }, 
+        result: (job.attrs as any).result,
+      },
       'Job completed successfully'
     );
   });
 
   agenda.on('fail', async (err: Error, job: Job) => {
     fastify.log.error(
-      { 
+      {
         err,
-        jobName: job.attrs.name, 
+        jobName: job.attrs.name,
         jobId: job.attrs._id,
         data: job.attrs.data,
         failReason: job.attrs.failReason,
         failCount: job.attrs.failCount,
-      }, 
+      },
       'Job failed'
     );
-    
+
     // Could add alerting or additional error handling here
   });
 
@@ -80,5 +80,5 @@ const agendaPlugin: FastifyPluginAsync = async (fastify) => {
 
 export default fp(agendaPlugin, {
   name: 'agenda',
-  dependencies: ['env', 'mongodb'], // Updated dependencies
+  dependencies: ['env', 'mongodb', 'nats'], // Updated dependencies
 });

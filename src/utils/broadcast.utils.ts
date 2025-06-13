@@ -1,3 +1,4 @@
+// src/utils/broadcast.utils.ts
 import { StringCodec } from 'nats';
 
 const sc = StringCodec();
@@ -7,10 +8,10 @@ const FAILURE_RATE_THRESHOLD = 0.1; // 10% failure rate
 
 // Valid status transitions for broadcasts
 const validTransitions: Record<BroadcastStatus, BroadcastStatus[]> = {
-  SCHEDULED: ['STARTING', 'CANCELLED'],
-  STARTING: ['PROCESSING', 'FAILED', 'CANCELLED'],
+  SCHEDULED: ['PROCESSING', 'CANCELLED'], // Direct to PROCESSING, no STARTING
+  STARTING: ['PROCESSING', 'FAILED', 'CANCELLED'], // Keep for backward compatibility
   PROCESSING: ['PAUSED', 'COMPLETED', 'FAILED', 'CANCELLED'],
-  PAUSED: ['PROCESSING', 'CANCELLED'], // Direct to PROCESSING
+  PAUSED: ['PROCESSING', 'CANCELLED'],
   COMPLETED: [], // Terminal state
   CANCELLED: [], // Terminal state
   FAILED: ['PROCESSING'], // Can retry
@@ -42,9 +43,16 @@ export interface BroadcastState {
   pausedAt?: string;
   completedAt?: string;
   cancelledAt?: string;
+  resumedAt?: string;
   lastError?: string;
   lastUpdated?: string;
   metadata?: any;
+  // Auto-pause tracking
+  pauseReason?: 'USER_REQUESTED' | 'AUTO_PAUSE_DISCONNECTION' | 'ERROR';
+  // Rate limiting
+  rateLimit?: {
+    messagesPerSecond: number;
+  };
 }
 
 // Check if transition is valid
@@ -63,7 +71,7 @@ export function deriveBroadcastStatus(state: BroadcastState): BroadcastStatus {
 
   // Not started yet
   if (processed === 0) {
-    return state.startedAt ? 'STARTING' : 'SCHEDULED';
+    return state.startedAt ? 'PROCESSING' : 'SCHEDULED'; // Skip STARTING
   }
 
   // In progress
@@ -91,7 +99,7 @@ export async function transitionBroadcastStatus(
   newStatus: BroadcastStatus,
   metadata?: Partial<BroadcastState>
 ): Promise<{ success: boolean; error?: string; state?: BroadcastState }> {
-  const stateKey = `${agentId}_${batchId}`;
+  const stateKey = `${agentId}.${batchId}`; // Changed from _ to .
 
   try {
     const entry = await kv.get(stateKey);
@@ -124,11 +132,19 @@ export async function transitionBroadcastStatus(
         break;
       case 'PAUSED':
         updatedState.pausedAt = new Date().toISOString();
+        if (!updatedState.pauseReason) {
+          updatedState.pauseReason = 'USER_REQUESTED';
+        }
         break;
       case 'PROCESSING':
-        // If resuming from pause, clear pause timestamp
+        // If coming from SCHEDULED, set startedAt
+        if (currentState.status === 'SCHEDULED') {
+          updatedState.startedAt = new Date().toISOString();
+        }
+        // If resuming from pause, track resume time
         if (currentState.status === 'PAUSED') {
-          updatedState.pausedAt = undefined;
+          updatedState.resumedAt = new Date().toISOString();
+          updatedState.pauseReason = undefined; // Clear pause reason
         }
         break;
       case 'COMPLETED':
@@ -140,7 +156,7 @@ export async function transitionBroadcastStatus(
         break;
     }
 
-    // Save with version check
+    // Save with version check for atomicity
     await kv.update(stateKey, sc.encode(JSON.stringify(updatedState)), entry.revision);
 
     return { success: true, state: updatedState };
@@ -159,7 +175,7 @@ export async function updateBroadcastProgress(
   agentId: string,
   taskUpdate: { status: 'COMPLETED' | 'ERROR'; phoneNumber: string }
 ): Promise<void> {
-  const stateKey = `${agentId}_${batchId}`;
+  const stateKey = `${agentId}.${batchId}`; // Changed from _ to .
 
   const maxRetries = 3;
   for (let i = 0; i < maxRetries; i++) {
@@ -225,7 +241,7 @@ export function createBroadcastState(params: {
   const now = new Date().toISOString();
 
   return {
-    status: params.scheduledAt ? 'SCHEDULED' : 'STARTING',
+    status: 'SCHEDULED', // Always start as SCHEDULED
     batchId: params.batchId,
     agentId: params.agentId,
     companyId: params.companyId,
@@ -249,6 +265,7 @@ export function getBroadcastSummary(state: BroadcastState): {
   failureRate: number;
   isComplete: boolean;
   isTerminal: boolean;
+  canResume: boolean;
 } {
   const derivedStatus = deriveBroadcastStatus(state);
   const progress = state.total > 0 ? (state.processed / state.total) * 100 : 0;
@@ -256,6 +273,7 @@ export function getBroadcastSummary(state: BroadcastState): {
   const failureRate = state.processed > 0 ? (state.failed / state.processed) * 100 : 0;
   const isComplete = state.processed === state.total;
   const isTerminal = ['COMPLETED', 'CANCELLED', 'FAILED'].includes(derivedStatus);
+  const canResume = derivedStatus === 'PAUSED';
 
   return {
     status: derivedStatus,
@@ -264,5 +282,39 @@ export function getBroadcastSummary(state: BroadcastState): {
     failureRate: Math.round(failureRate),
     isComplete,
     isTerminal,
+    canResume,
   };
+}
+
+// Auto-pause all active broadcasts for an agent (on disconnect)
+export async function autoPauseBroadcasts(
+  kv: any,
+  agentId: string,
+  reason: 'AUTO_PAUSE_DISCONNECTION' | 'ERROR' = 'AUTO_PAUSE_DISCONNECTION'
+): Promise<number> {
+  let pausedCount = 0;
+  const keys = await kv.keys();
+
+  for await (const key of keys) {
+    if (key.startsWith(`${agentId}.`)) {
+      // Changed from _ to .
+      const entry = await kv.get(key);
+      if (entry?.value) {
+        const state: BroadcastState = JSON.parse(sc.decode(entry.value));
+
+        // Only pause if currently PROCESSING
+        if (state.status === 'PROCESSING') {
+          const result = await transitionBroadcastStatus(kv, agentId, state.batchId, 'PAUSED', {
+            pauseReason: reason,
+          });
+
+          if (result.success) {
+            pausedCount++;
+          }
+        }
+      }
+    }
+  }
+
+  return pausedCount;
 }

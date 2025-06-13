@@ -7,6 +7,7 @@ import {
   TaskFiltersSchema,
   TaskUpdateSchema,
   TaskTypeQuerySchema,
+  RescheduleTaskSchema,
 } from '../../schemas/zod-schemas';
 
 const TaskParamsSchema = z.object({
@@ -16,6 +17,8 @@ const TaskParamsSchema = z.object({
 const taskRoutes: FastifyPluginAsync = async (fastify) => {
   const handlers = createTaskHandlers({
     taskRepository: fastify.taskRepository,
+    agenda: fastify.agenda,
+    log: fastify.log,
   });
 
   // General task management
@@ -40,6 +43,16 @@ const taskRoutes: FastifyPluginAsync = async (fastify) => {
       }),
     ],
     handler: handlers.updateTask,
+  });
+
+  fastify.patch('/tasks/:id/reschedule', {
+    preHandler: [
+      fastify.zodValidate({
+        params: TaskParamsSchema,
+        body: RescheduleTaskSchema,
+      }),
+    ],
+    handler: handlers.rescheduleTask,
   });
 
   // Task type-specific endpoints

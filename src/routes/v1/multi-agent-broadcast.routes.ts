@@ -3,9 +3,9 @@
 import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import { createMultiAgentBroadcastHandlers } from '../../handlers/multi-agent-broadcast.handler';
-import { 
-  MultiAgentBroadcastSchema, 
-  MultiAgentBroadcastPreviewSchema 
+import {
+  MultiAgentBroadcastSchema,
+  MultiAgentBroadcastPreviewSchema,
 } from '../../schemas/zod-schemas';
 
 const multiAgentBroadcastRoutes: FastifyPluginAsync = async (fastify) => {
@@ -21,18 +21,15 @@ const multiAgentBroadcastRoutes: FastifyPluginAsync = async (fastify) => {
   // Preview multi-agent broadcast
   fastify.post('/broadcast/multi-agent/preview', {
     preHandler: [
-      fastify.authenticate, 
-      fastify.zodValidate({ body: MultiAgentBroadcastPreviewSchema })
+      fastify.authenticate,
+      fastify.zodValidate({ body: MultiAgentBroadcastPreviewSchema }),
     ],
     handler: handlers.previewMultiAgentBroadcast,
   });
 
   // Create multi-agent broadcast
   fastify.post('/broadcast/multi-agent', {
-    preHandler: [
-      fastify.authenticate, 
-      fastify.zodValidate({ body: MultiAgentBroadcastSchema })
-    ],
+    preHandler: [fastify.authenticate, fastify.zodValidate({ body: MultiAgentBroadcastSchema })],
     handler: handlers.createMultiAgentBroadcast,
   });
 };

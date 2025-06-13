@@ -28,12 +28,11 @@ export interface BroadcastHandlerDeps {
   agenda: Agenda;
   js: JetStreamClient;
   pg: any;
-  publishEvent: (subject: string, data: any) => Promise<void>;
   log: any;
 }
 
 export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
-  const { taskRepository, agenda, js, pg, publishEvent, log } = deps;
+  const { taskRepository, agenda, js, pg, log } = deps;
   const sc = StringCodec();
 
   const broadcastByTags = async (
@@ -52,14 +51,14 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         throw forbidden('Unauthorized company access');
       }
 
-      const { agentId, tags, message, schedule, label, userId, variables, options } = payload;
+      const { agentId, tags, message, scheduleAt, label, userId, variables, options } = payload;
       const batchId = nanoid();
-      const scheduledAt = schedule ? new Date(schedule) : undefined;
+      const scheduledAt = new Date(scheduleAt);
 
       // Validate broadcast schedule
       await validateBroadcastSchedule(taskRepository, agentId, scheduledAt);
 
-      // Get contacts from Postgres (excluding groups)
+      // Get contacts from Postgres
       const contacts = await getContactsByTags({
         pg,
         companyId: userCompany,
@@ -79,7 +78,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
       // Extract variables from message if template-like
       const templateVariables = extractVariableNames(message);
 
-      // Determine task agent (DAISI by default, could be configured per agent/company)
+      // Determine task agent
       const taskAgent: TaskAgent = 'DAISI';
 
       // Create initial broadcast state
@@ -94,6 +93,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
           createdBy: userId,
           tags: tags.split(',').map((t) => t.trim()),
           channel: 'broadcast-by-tags',
+          label,
           template:
             templateVariables.length > 0
               ? {
@@ -104,10 +104,10 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
       });
 
       // Store broadcast state in KV
-      const kv = await js.views.kv(`broadcast_state`);
-      await kv.put(`${agentId}_${batchId}`, sc.encode(JSON.stringify(broadcastState)));
+      const kv = await js.views.kv('broadcast_state');
+      await kv.put(`${agentId}.${batchId}`, sc.encode(JSON.stringify(broadcastState))); // Changed from _ to .
 
-      // Create tasks in MongoDB using new task structure
+      // Create tasks in MongoDB
       const tasksToCreate = contacts.map((contact) =>
         createDaisiBroadcastTaskPayload(
           userCompany,
@@ -119,7 +119,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
             variables: variables || {},
             userId,
             label,
-            scheduledAt: scheduledAt || undefined,
+            scheduledAt: scheduledAt,
             batchId,
             metadata: broadcastState.metadata,
           },
@@ -150,7 +150,6 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
               label,
               taskAgent,
               contact: {
-                // name: contacts[i].custom_name || contacts[i].phone_number,
                 phone: contacts[i].phone_number,
               },
             })
@@ -161,7 +160,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         );
       }
 
-      // Schedule or start the broadcast
+      // Schedule the broadcast start
       const jobData = {
         batchId,
         companyId: userCompany,
@@ -170,41 +169,22 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         total: contacts.length,
       };
 
-      if (schedule) {
-        const job = await agenda.schedule(schedule, 'signal-broadcast-start', jobData);
+      const job = await agenda.schedule(scheduledAt, 'signal-broadcast-start', jobData);
 
-        log.info(
-          { batchId, schedule, total: contacts.length, taskAgent },
-          '[Broadcast] Scheduled broadcast'
-        );
-
-        return sendSuccess(
-          reply,
-          {
-            status: 'scheduled' as const,
-            broadcastStatus: 'SCHEDULED' as BroadcastStatus,
-            batchId,
-            total: contacts.length,
-            scheduleAt: schedule,
-            jobId: job.attrs._id?.toString(),
-            taskAgent,
-          },
-          201
-        );
-      }
-
-      // Start immediately
-      await agenda.now('signal-broadcast-start', jobData);
-
-      log.info({ batchId, total: contacts.length, taskAgent }, '[Broadcast] Started broadcast');
+      log.info(
+        { batchId, scheduledAt, total: contacts.length, taskAgent },
+        '[Broadcast] Scheduled broadcast'
+      );
 
       return sendSuccess(
         reply,
         {
-          status: 'started' as const,
-          broadcastStatus: 'STARTING' as BroadcastStatus,
+          status: 'scheduled' as const,
+          broadcastStatus: 'SCHEDULED' as BroadcastStatus,
           batchId,
           total: contacts.length,
+          scheduleAt: scheduledAt.toISOString(),
+          jobId: job.attrs._id?.toString(),
           taskAgent,
         },
         201
@@ -298,8 +278,8 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
       }
 
       // Get current state from KV
-      const kv = await js.views.kv(`broadcast_state`);
-      const stateKey = `${firstTask.agentId}_${batchId}`;
+      const kv = await js.views.kv('broadcast_state');
+      const stateKey = `${firstTask.agentId}.${batchId}`; // Changed from _ to .
       const stateEntry = await kv.get(stateKey);
 
       let broadcastState: BroadcastState | null = null;
@@ -332,7 +312,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         }
       }
 
-      // Get broadcast summary with derived status
+      // Get broadcast summary
       const summary = broadcastState ? getBroadcastSummary(broadcastState) : null;
 
       const response = {
@@ -344,9 +324,11 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         scheduledAt: firstTask.scheduledAt,
         startedAt: broadcastState?.startedAt,
         pausedAt: broadcastState?.pausedAt,
+        resumedAt: broadcastState?.resumedAt,
         completedAt: broadcastState?.completedAt,
         cancelledAt: broadcastState?.cancelledAt,
         createdAt: firstTask.createdAt,
+        pauseReason: broadcastState?.pauseReason,
         broadcastMeta: broadcastState?.metadata || {},
         stats,
         progress: summary?.progress || 0,
@@ -354,6 +336,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         failureRate: summary?.failureRate || 0,
         isComplete: summary?.isComplete || false,
         isTerminal: summary?.isTerminal || false,
+        canResume: summary?.canResume || false,
       };
 
       return sendSuccess(reply, response);
@@ -385,7 +368,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
       const taskAgent = tasks[0].taskAgent;
 
       // Transition to CANCELLED status
-      const kv = await js.views.kv(`broadcast_state`);
+      const kv = await js.views.kv('broadcast_state');
       const transitionResult = await transitionBroadcastStatus(kv, agentId, batchId, 'CANCELLED');
 
       if (!transitionResult.success) {
@@ -410,13 +393,6 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
           updatedCount++;
         }
       }
-
-      // Send cancel signal to agent
-      await publishEvent(`v1.agents.${agentId}`, {
-        action: 'CANCEL_BROADCAST',
-        batchId,
-        taskAgent,
-      });
 
       log.info(
         { batchId, cancelCount, updatedCount, taskAgent },
@@ -456,24 +432,21 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
 
       const agentId = tasks[0].agentId;
 
-      const kv = await js.views.kv(`broadcast_state`);
-      const transitionResult = await transitionBroadcastStatus(kv, agentId, batchId, 'PAUSED');
+      const kv = await js.views.kv('broadcast_state');
+      const transitionResult = await transitionBroadcastStatus(kv, agentId, batchId, 'PAUSED', {
+        pauseReason: 'USER_REQUESTED',
+      });
 
       if (!transitionResult.success) {
         throw conflict(transitionResult.error || 'Cannot pause broadcast', 'INVALID_TRANSITION');
       }
-
-      // Send pause signal to agent
-      await publishEvent(`v1.agents.${agentId}`, {
-        action: 'PAUSE_BROADCAST',
-        batchId,
-      });
 
       log.info({ batchId, agentId }, '[Broadcast] Paused broadcast');
 
       return sendSuccess(reply, {
         batchId,
         broadcastStatus: 'PAUSED' as BroadcastStatus,
+        pausedAt: transitionResult.state?.pausedAt,
       });
     } catch (error) {
       const appError = handleError(error);
@@ -501,7 +474,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
 
       const agentId = tasks[0].agentId;
 
-      const kv = await js.views.kv(`broadcast_state`);
+      const kv = await js.views.kv('broadcast_state');
 
       // Direct transition from PAUSED to PROCESSING
       const transitionResult = await transitionBroadcastStatus(kv, agentId, batchId, 'PROCESSING');
@@ -510,17 +483,12 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         throw conflict(transitionResult.error || 'Cannot resume broadcast', 'INVALID_TRANSITION');
       }
 
-      // Send resume signal to agent
-      await publishEvent(`v1.agents.${agentId}`, {
-        action: 'RESUME_BROADCAST',
-        batchId,
-      });
-
       log.info({ batchId, agentId }, '[Broadcast] Resumed broadcast');
 
       return sendSuccess(reply, {
         batchId,
         broadcastStatus: 'PROCESSING' as BroadcastStatus,
+        resumedAt: transitionResult.state?.resumedAt,
       });
     } catch (error) {
       const appError = handleError(error);
@@ -555,8 +523,8 @@ async function getContactsByTags(params: {
     FROM ${tableName}
     WHERE agent_id = $1
     AND string_to_array(tags, ',') && $2::text[]
-      AND LENGTH(phone_number) >= 10
-      AND LENGTH(phone_number) <= 15
+    AND LENGTH(phone_number) >= 10
+    AND LENGTH(phone_number) <= 15
     ORDER BY phone_number
   `;
 
@@ -569,10 +537,8 @@ async function getContactsByTags(params: {
 async function validateBroadcastSchedule(
   taskRepository: TaskRepository,
   agentId: string,
-  scheduleDate?: Date
+  scheduleDate: Date
 ): Promise<void> {
-  if (!scheduleDate) return;
-
   // Check for broadcasts scheduled within 7 days
   const nearbyBroadcasts = await taskRepository.findByCompany(
     '',

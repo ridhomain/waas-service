@@ -16,7 +16,6 @@ const broadcastRoutes: FastifyPluginAsync = async (fastify) => {
     agenda: fastify.agenda,
     js: fastify.js,
     pg: fastify.pg,
-    publishEvent: fastify.publishEvent,
     log: fastify.log,
   });
 

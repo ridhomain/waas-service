@@ -87,7 +87,7 @@ export const createTaskRepository = (db: Db) => {
 
     return collection
       .find(query)
-      .sort({ scheduledAt: 1, createdAt: -1 })
+      .sort({ createdAt: -1, scheduledAt: 1 })
       .skip(pagination?.skip ?? 0)
       .limit(pagination?.limit ?? 20)
       .toArray();

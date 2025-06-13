@@ -34,7 +34,7 @@ interface AgentValidation {
 }
 
 export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandlerDeps) => {
-  const { taskRepository, agenda, js, pg, publishEvent, log } = deps;
+  const { taskRepository, agenda, js, pg, log } = deps;
   const sc = StringCodec();
 
   const createMultiAgentBroadcast = async (
@@ -56,23 +56,24 @@ export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandl
       const { agents, tags, message, label, userId, variables, options } = payload;
 
       // Validate no duplicate agents
-      const agentIds = agents.map(a => a.agentId);
+      const agentIds = agents.map((a) => a.agentId);
       const uniqueAgentIds = new Set(agentIds);
       if (agentIds.length !== uniqueAgentIds.size) {
-        throw badRequest('Duplicate agent IDs found. Each agent can only appear once.', 'DUPLICATE_AGENTS');
+        throw badRequest(
+          'Duplicate agent IDs found. Each agent can only appear once.',
+          'DUPLICATE_AGENTS'
+        );
       }
 
       // Validate all agents' broadcast capacity
-      const validations = await validateAllAgentsBroadcastCapacity(
-        taskRepository,
-        agents
-      );
+      const validations = await validateAllAgentsBroadcastCapacity(taskRepository, agents);
 
       // Check if any agent cannot broadcast
-      const failedValidations = validations.filter(v => !v.canBroadcast);
+      const failedValidations = validations.filter((v) => !v.canBroadcast);
       if (failedValidations.length > 0) {
-        const reasons = failedValidations.map(v => 
-          `${v.agentId}: ${v.reason} (active: ${v.activeBroadcasts}, scheduled: ${v.scheduledBroadcasts})`
+        const reasons = failedValidations.map(
+          (v) =>
+            `${v.agentId}: ${v.reason} (active: ${v.activeBroadcasts}, scheduled: ${v.scheduledBroadcasts})`
         );
         throw conflict(
           `Cannot create multi-agent broadcast. The following agents have reached their limits:\n${reasons.join('\n')}`,
@@ -83,7 +84,7 @@ export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandl
 
       // Process each agent independently
       const results = [];
-      const tagList = tags.split(',').map(t => t.trim());
+      const tagList = tags.split(',').map((t) => t.trim());
 
       // Batch query contacts for all agents to reduce DB calls
       const allAgentContacts = await getContactsForMultipleAgents({
@@ -95,7 +96,7 @@ export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandl
 
       for (const agent of agents) {
         const { agentId, scheduleAt } = agent;
-        
+
         // Get contacts for this specific agent from the batch query
         const contacts = allAgentContacts.get(agentId) || [];
 
@@ -108,10 +109,13 @@ export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandl
         }
 
         const scheduledAt = new Date(scheduleAt);
-        
+
         // Validate schedule is in the future
         if (scheduledAt <= new Date()) {
-          throw badRequest(`Schedule for agent ${agentId} must be in the future`, 'INVALID_SCHEDULE');
+          throw badRequest(
+            `Schedule for agent ${agentId} must be in the future`,
+            'INVALID_SCHEDULE'
+          );
         }
 
         // Create a separate broadcast for this agent
@@ -135,10 +139,10 @@ export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandl
 
         // Store broadcast state
         const kv = await js.views.kv('broadcast_state');
-        await kv.put(`${agentId}_${batchId}`, sc.encode(JSON.stringify(broadcastState)));
+        await kv.put(`${agentId}.${batchId}`, sc.encode(JSON.stringify(broadcastState)));
 
         // Create tasks for this agent's contacts
-        const tasksToCreate = contacts.map(contact =>
+        const tasksToCreate = contacts.map((contact) =>
           createDaisiBroadcastTaskPayload(
             userCompany,
             {
@@ -212,7 +216,10 @@ export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandl
       }
 
       if (results.length === 0) {
-        throw badRequest('No broadcasts could be created. No contacts found for any agent with the specified tags.', 'NO_BROADCASTS_CREATED');
+        throw badRequest(
+          'No broadcasts could be created. No contacts found for any agent with the specified tags.',
+          'NO_BROADCASTS_CREATED'
+        );
       }
 
       // Calculate totals
@@ -256,13 +263,13 @@ export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandl
       }
 
       // Validate no duplicate agents
-      const agentIds = agents.map(a => a.agentId);
+      const agentIds = agents.map((a) => a.agentId);
       const uniqueAgentIds = new Set(agentIds);
       if (agentIds.length !== uniqueAgentIds.size) {
         throw badRequest('Duplicate agent IDs found', 'DUPLICATE_AGENTS');
       }
 
-      const tagList = tags.split(',').map(t => t.trim());
+      const tagList = tags.split(',').map((t) => t.trim());
 
       // Get contact counts for all agents efficiently
       const contactCounts = await getContactCountsForAgents({
@@ -273,14 +280,11 @@ export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandl
       });
 
       // Validate broadcast capacity for all agents
-      const validations = await validateAllAgentsBroadcastCapacity(
-        taskRepository,
-        agents
-      );
+      const validations = await validateAllAgentsBroadcastCapacity(taskRepository, agents);
 
       // Build preview for each agent
-      const agentPreviews = agents.map(agent => {
-        const validation = validations.find(v => v.agentId === agent.agentId)!;
+      const agentPreviews = agents.map((agent) => {
+        const validation = validations.find((v) => v.agentId === agent.agentId)!;
         const contactCount = contactCounts.get(agent.agentId) || 0;
 
         return {
@@ -298,8 +302,11 @@ export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandl
         };
       });
 
-      const totalContacts = Array.from(contactCounts.values()).reduce((sum, count) => sum + count, 0);
-      const canProceed = agentPreviews.every(p => p.canBroadcast && p.contactCount > 0);
+      const totalContacts = Array.from(contactCounts.values()).reduce(
+        (sum, count) => sum + count,
+        0
+      );
+      const canProceed = agentPreviews.every((p) => p.canBroadcast && p.contactCount > 0);
 
       return sendSuccess(reply, {
         canProceed,
@@ -308,8 +315,8 @@ export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandl
         summary: {
           totalContacts,
           totalAgents: agents.length,
-          agentsWithContacts: agentPreviews.filter(p => p.contactCount > 0).length,
-          agentsAtLimit: agentPreviews.filter(p => !p.canBroadcast).length,
+          agentsWithContacts: agentPreviews.filter((p) => p.contactCount > 0).length,
+          agentsAtLimit: agentPreviews.filter((p) => !p.canBroadcast).length,
         },
       });
     } catch (error) {
@@ -353,17 +360,17 @@ async function getContactsForMultipleAgents(params: {
 
   const values = [agentIds, tags];
   const result = await pg.query(query, values);
-  
+
   // Group contacts by agent
   const contactsByAgent = new Map<string, ContactRecord[]>();
-  
+
   for (const row of result.rows) {
     if (!contactsByAgent.has(row.agent_id)) {
       contactsByAgent.set(row.agent_id, []);
     }
     contactsByAgent.get(row.agent_id)!.push(row);
   }
-  
+
   return contactsByAgent;
 }
 
@@ -394,12 +401,12 @@ async function getContactCountsForAgents(params: {
 
   const values = [agentIds, tags];
   const result = await pg.query(query, values);
-  
+
   const counts = new Map<string, number>();
   for (const row of result.rows) {
     counts.set(row.agent_id, parseInt(row.contact_count));
   }
-  
+
   return counts;
 }
 
@@ -439,7 +446,7 @@ async function validateAgentBroadcastCapacity(
     { limit: 100, skip: 0 }
   );
 
-  const activeBroadcasts = [...new Set(activeTasks.map(t => t.batchId).filter(Boolean))];
+  const activeBroadcasts = [...new Set(activeTasks.map((t) => t.batchId).filter(Boolean))];
 
   // Get scheduled broadcasts
   const oneWeekFromSchedule = new Date(scheduleDate.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -455,7 +462,7 @@ async function validateAgentBroadcastCapacity(
   );
 
   const scheduledBroadcastsMap = new Map<string, Date>();
-  scheduledTasks.forEach(task => {
+  scheduledTasks.forEach((task) => {
     if (task.batchId && task.scheduledAt) {
       scheduledBroadcastsMap.set(task.batchId, task.scheduledAt);
     }

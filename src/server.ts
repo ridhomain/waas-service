@@ -38,8 +38,8 @@ async function start() {
   await fastify.register(mongodbPlugin); // depends on 'env'
   await fastify.register(postgresPlugin); // depends on 'env'
   await fastify.register(natsPlugin); // depends on 'env'
-  await fastify.register(agendaPlugin); // depends on 'env', 'mongodb'
   await fastify.register(authPlugin); // depends on 'env'
+  await fastify.register(agendaPlugin); // depends on 'env', 'mongodb', 'nats
   await fastify.register(zodValidationPlugin); // no dependencies
   await fastify.register(fastifyCors);
   await fastify.register(fastifyHelmet);

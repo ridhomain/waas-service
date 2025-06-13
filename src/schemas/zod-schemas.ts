@@ -64,11 +64,11 @@ export const BaileysMessageSchema = z.union([
 const BaseFieldsSchema = z.object({
   companyId: CompanyIdSchema,
   agentId: AgentIdSchema,
-  scheduleAt: DateTimeSchema.optional(),
   options: z.record(z.any()).optional(),
   variables: z.record(z.any()).optional(),
   userId: z.string().optional(),
   label: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
 });
 
 // Daisi schemas (taskType: 'chat', taskAgent: 'DAISI')
@@ -135,16 +135,19 @@ export const MailcastSendMessageSchema = z.discriminatedUnion('type', [
     type: z.literal('text'),
     phoneNumber: PhoneNumberSchema,
     message: TextMessageSchema,
+    scheduleAt: DateTimeSchema,
   }),
   BaseFieldsSchema.extend({
     type: z.literal('image'),
     phoneNumber: PhoneNumberSchema,
     message: ImageMessageSchema,
+    scheduleAt: DateTimeSchema,
   }),
   BaseFieldsSchema.extend({
     type: z.literal('document'),
     phoneNumber: PhoneNumberSchema,
     message: DocumentMessageSchema,
+    scheduleAt: DateTimeSchema,
   }),
 ]);
 
@@ -214,19 +217,19 @@ export const BroadcastByTagsSchema = z.discriminatedUnion('type', [
   BaseFieldsSchema.extend({
     type: z.literal('text'),
     tags: z.string().min(1, 'Tags are required'),
-    schedule: DateTimeSchema.optional(),
+    scheduleAt: DateTimeSchema,
     message: TextMessageSchema,
   }),
   BaseFieldsSchema.extend({
     type: z.literal('image'),
     tags: z.string().min(1, 'Tags are required'),
-    schedule: DateTimeSchema.optional(),
+    scheduleAt: DateTimeSchema,
     message: ImageMessageSchema,
   }),
   BaseFieldsSchema.extend({
     type: z.literal('document'),
     tags: z.string().min(1, 'Tags are required'),
-    schedule: DateTimeSchema.optional(),
+    scheduleAt: DateTimeSchema,
     message: DocumentMessageSchema,
   }),
 ]);
@@ -235,6 +238,7 @@ export const BroadcastPreviewSchema = z
   .object({
     companyId: CompanyIdSchema,
     agentId: AgentIdSchema,
+    scheduleAt: DateTimeSchema,
     tags: z.string().optional(),
     phones: z.string().optional(),
   })
@@ -257,11 +261,12 @@ export const AgentScheduleItemSchema = z.object({
 
 export const MultiAgentBroadcastSchema = z.object({
   companyId: CompanyIdSchema,
-  agents: z.array(AgentScheduleItemSchema)
+  agents: z
+    .array(AgentScheduleItemSchema)
     .min(1, 'At least one agent is required')
     .refine(
       (agents) => {
-        const agentIds = agents.map(a => a.agentId);
+        const agentIds = agents.map((a) => a.agentId);
         const uniqueIds = new Set(agentIds);
         return agentIds.length === uniqueIds.size;
       },
@@ -278,11 +283,12 @@ export const MultiAgentBroadcastSchema = z.object({
 
 export const MultiAgentBroadcastPreviewSchema = z.object({
   companyId: CompanyIdSchema,
-  agents: z.array(AgentScheduleItemSchema)
+  agents: z
+    .array(AgentScheduleItemSchema)
     .min(1, 'At least one agent is required')
     .refine(
       (agents) => {
-        const agentIds = agents.map(a => a.agentId);
+        const agentIds = agents.map((a) => a.agentId);
         const uniqueIds = new Set(agentIds);
         return agentIds.length === uniqueIds.size;
       },
@@ -309,6 +315,12 @@ export const TaskTypeQuerySchema = z.object({
     .default(0),
 });
 
+export const RescheduleTaskSchema = z.object({
+  scheduleAt: DateTimeSchema,
+  reason: z.string().optional(),
+  metadata: z.record(z.any()).optional(),
+});
+
 // Type exports
 export type DaisiSendMessageInput = z.infer<typeof DaisiSendMessageSchema>;
 export type DaisiSendGroupMessageInput = z.infer<typeof DaisiSendGroupMessageSchema>;
@@ -326,3 +338,4 @@ export type CancelBroadcastInput = z.infer<typeof CancelBroadcastSchema>;
 export type MultiAgentBroadcastInput = z.infer<typeof MultiAgentBroadcastSchema>;
 export type MultiAgentBroadcastPreviewInput = z.infer<typeof MultiAgentBroadcastPreviewSchema>;
 export type TaskTypeQueryInput = z.infer<typeof TaskTypeQuerySchema>;
+export type RescheduleTaskInput = z.infer<typeof RescheduleTaskSchema>;

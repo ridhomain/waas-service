@@ -55,7 +55,7 @@ export const createDaisiChatTaskPayload = (
     variables: payload.variables || {},
     userId: payload.userId,
     label: payload.label,
-    scheduledAt: payload.scheduleAt ? new Date(payload.scheduleAt) : null,
+    metadata: payload.metadata || {},
   };
 };
 
@@ -89,6 +89,7 @@ export const createDaisiBroadcastTaskPayload = (
   label: payload.label,
   scheduledAt: payload.scheduledAt || null,
   batchId: payload.batchId,
+  metadata: payload.metadata || {},
 });
 
 /**
@@ -110,6 +111,7 @@ export const createMailcastTaskPayload = (
   userId: payload.userId,
   label: payload.label,
   scheduledAt: payload.scheduleAt ? new Date(payload.scheduleAt) : null,
+  metadata: payload.metadata || {},
 });
 
 /**
