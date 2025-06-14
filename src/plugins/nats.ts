@@ -1,4 +1,4 @@
-// src/plugins/nats.ts (with DLQ stream support)
+// src/plugins/nats.ts (clean version without DLQ)
 import { FastifyPluginAsync, FastifyInstance } from 'fastify';
 import fp from 'fastify-plugin';
 import {
@@ -123,7 +123,7 @@ const natsPlugin: FastifyPluginAsync = async (fastify) => {
 
 export default fp(natsPlugin, {
   name: 'nats',
-  dependencies: ['env'], // Added explicit dependency
+  dependencies: ['env'],
 });
 
 async function initializeNATSResources(
@@ -131,13 +131,13 @@ async function initializeNATSResources(
   jsm: JetStreamManager,
   fastify: FastifyInstance
 ): Promise<void> {
-  // Create main stream
+  // Create outbound stream (to Agent APIs)
   await ensureAgentDurableStream(jsm, fastify);
 
-  // Create DLQ stream
-  // await ensureDLQTasksStream(jsm, fastify);
+  // Create inbound stream (task updates)
+  await ensureTaskUpdatesStream(jsm, fastify);
 
-  // Create KV store and decorate fastify with it
+  // Create KV store for broadcast state
   const kv = await ensureBroadcastStateKV(js, fastify);
   fastify.decorate('broadcastStateKV', kv);
 
@@ -184,45 +184,49 @@ async function ensureAgentDurableStream(
   }
 }
 
-// DLQ stream creation function
-// async function ensureDLQTasksStream(
-//   jsm: JetStreamManager,
-//   fastify: FastifyInstance
-// ): Promise<void> {
-//   const streamName = 'dlq_tasks_stream';
+// Task updates stream creation function
+async function ensureTaskUpdatesStream(
+  jsm: JetStreamManager,
+  fastify: FastifyInstance
+): Promise<void> {
+  const streamName = 'task_updates_stream';
 
-//   try {
-//     const streamInfo = await jsm.streams.info(streamName);
-//     fastify.log.info(`[NATS] Stream "${streamName}" already exists`, {
-//       messages: streamInfo.state.messages,
-//       bytes: streamInfo.state.bytes,
-//       consumer_count: streamInfo.state.consumer_count,
-//     });
-//   } catch (err: any) {
-//     if (err.message.includes('stream not found')) {
-//       await jsm.streams.add({
-//         name: streamName,
-//         subjects: ['v1.dlqtasks.broadcasts.*', 'v1.dlqtasks.mailcasts.*'],
-//         retention: RetentionPolicy.Limits,
-//         max_age: 7 * 24 * 60 * 60 * 1_000_000_000, // 7 days in nanoseconds
-//         max_bytes: 5 * 1024 * 1024 * 1024, // 5GB
-//         max_msgs: 5000000, // 5 million messages max
-//         storage: StorageType.File,
-//         discard: DiscardPolicy.Old,
-//         duplicate_window: 60 * 1_000_000_000, // 1 minute deduplication window
-//         description: 'Dead Letter Queue stream for failed broadcast and mailcast tasks',
-//       });
+  try {
+    const streamInfo = await jsm.streams.info(streamName);
+    fastify.log.info(`[NATS] Stream "${streamName}" already exists`, {
+      messages: streamInfo.state.messages,
+      bytes: streamInfo.state.bytes,
+      consumer_count: streamInfo.state.consumer_count,
+    });
+  } catch (err: any) {
+    if (err.message.includes('stream not found')) {
+      await jsm.streams.add({
+        name: streamName,
+        subjects: [
+          'v1.tasks.updates.*', // From Agent APIs
+          'v1.tasks.mailcast.*', // From Mailcast Service
+          // 'v1.tasks.external.*' // From external webhooks if needed
+        ],
+        retention: RetentionPolicy.Limits,
+        max_age: 24 * 60 * 60 * 1_000_000_000, // 1 day in nanoseconds
+        max_bytes: 512 * 1024 * 1024, // 512MB
+        max_msgs: 500000, // 500k messages max
+        storage: StorageType.File,
+        discard: DiscardPolicy.Old,
+        duplicate_window: 30 * 1_000_000_000, // 30 seconds deduplication
+        description: 'Inbound task status updates from all sources',
+      });
 
-//       fastify.log.info(`[NATS] Stream "${streamName}" created successfully`, {
-//         subjects: ['v1.dlqtasks.broadcasts.*', 'v1.dlqtasks.mailcasts.*'],
-//         retention: '7 days',
-//         max_size: '5GB',
-//       });
-//     } else {
-//       throw err;
-//     }
-//   }
-// }
+      fastify.log.info(`[NATS] Stream "${streamName}" created successfully`, {
+        subjects: ['v1.tasks.updates.*', 'v1.tasks.mailcast.*', 'v1.tasks.external.*'],
+        retention: '1 day',
+        max_size: '512MB',
+      });
+    } else {
+      throw err;
+    }
+  }
+}
 
 // KV store creation function
 async function ensureBroadcastStateKV(js: JetStreamClient, fastify: FastifyInstance): Promise<KV> {

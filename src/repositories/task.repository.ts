@@ -61,6 +61,68 @@ export const createTaskRepository = (db: Db) => {
     return result.modifiedCount > 0;
   };
 
+  const updateMany = async (
+    updates: Array<{
+      taskId: string;
+      data: Partial<Omit<Task, '_id' | 'createdAt'>>;
+    }>
+  ): Promise<{ successful: number; failed: number }> => {
+    if (updates.length === 0) {
+      return { successful: 0, failed: 0 };
+    }
+
+    // Filter out invalid task IDs
+    const validUpdates = updates.filter(({ taskId }) => ObjectId.isValid(taskId));
+    const invalidCount = updates.length - validUpdates.length;
+
+    if (validUpdates.length === 0) {
+      return { successful: 0, failed: updates.length };
+    }
+
+    // Prepare bulk operations
+    const bulkOps = validUpdates.map(({ taskId, data }) => ({
+      updateOne: {
+        filter: { _id: new ObjectId(taskId) },
+        update: {
+          $set: {
+            ...data,
+            updatedAt: new Date(),
+          },
+        },
+      },
+    }));
+
+    let result: any;
+
+    try {
+      // Execute bulk write with unordered operations (continues on error)
+      result = await collection.bulkWrite(bulkOps, { ordered: false });
+
+      return {
+        successful: result.modifiedCount,
+        failed: invalidCount + (validUpdates.length - result.modifiedCount),
+      };
+    } catch (err: any) {
+      // Handle bulk write errors (partial success)
+      if (err.code === 11000 || err.name === 'BulkWriteError') {
+        const writeErrors = err.writeErrors || [];
+        const successCount = result.matchedCount || 0;
+
+        return {
+          successful: successCount,
+          failed: invalidCount + writeErrors.length,
+        };
+      }
+
+      // For other errors, assume all failed
+      console.error('[TaskRepository] Bulk update failed:', err);
+      return {
+        successful: 0,
+        failed: updates.length,
+      };
+    }
+  };
+
   const findById = async (taskId: string): Promise<Task | null> => {
     if (!ObjectId.isValid(taskId)) {
       return null;
@@ -259,12 +321,12 @@ export const createTaskRepository = (db: Db) => {
     create,
     createMany,
     update,
+    updateMany,
     findById,
     findByCompany,
     findScheduledTasks,
     findByBatch,
     countByCompany,
-    // New methods
     findChatTasks,
     findBroadcastTasks,
     findMailcastTasks,
