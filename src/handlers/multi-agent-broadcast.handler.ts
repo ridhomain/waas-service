@@ -7,7 +7,7 @@ import { forbidden, badRequest, handleError, conflict } from '../utils/errors';
 import { sendSuccess, sendError } from '../utils/response';
 import { createDaisiBroadcastTaskPayload } from '../utils/task.utils';
 import { MultiAgentBroadcastInput, MultiAgentBroadcastPreviewInput } from '../schemas/zod-schemas';
-import { JetStreamClient, StringCodec, headers } from 'nats';
+import { JetStreamClient, StringCodec } from 'nats';
 import { createBroadcastState } from '../utils/broadcast.utils';
 
 export interface MultiAgentBroadcastHandlerDeps {
@@ -161,33 +161,7 @@ export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandl
           )
         );
 
-        const taskIds = await taskRepository.createMany(tasksToCreate);
-
-        // Publish tasks to stream
-        const subject = `v1.broadcasts.${agentId}`;
-        const h = headers();
-        h.append('Batch-Id', batchId);
-        h.append('Agent-Id', agentId);
-        h.append('Company', userCompany);
-
-        for (let i = 0; i < taskIds.length; i++) {
-          await js.publish(
-            subject,
-            sc.encode(
-              JSON.stringify({
-                taskId: taskIds[i],
-                batchId,
-                phoneNumber: contacts[i].phone_number,
-                message,
-                options: options || {},
-                variables: variables || {},
-                label,
-                taskAgent: 'DAISI',
-              })
-            ),
-            { headers: h }
-          );
-        }
+        await taskRepository.createMany(tasksToCreate);
 
         // Schedule broadcast
         const jobData = {
@@ -332,7 +306,6 @@ export const createMultiAgentBroadcastHandlers = (deps: MultiAgentBroadcastHandl
 };
 
 // Helper functions
-
 // Batch query contacts for multiple agents to reduce DB calls
 async function getContactsForMultipleAgents(params: {
   pg: any;

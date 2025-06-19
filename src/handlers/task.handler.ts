@@ -90,6 +90,44 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
     }
   };
 
+  const getNextPendingTask = async (
+    request: FastifyRequest<{ Params: { batchId: string } }>,
+    reply: FastifyReply
+  ) => {
+    try {
+      const { batchId } = request.params;
+      const userCompany = request.user?.company;
+
+      if (!userCompany) {
+        throw unauthorized('No company ID found');
+      }
+
+      // Get next pending task from the batch
+      const task = await taskRepository.findNextPendingByBatch(batchId);
+
+      if (!task) {
+        throw notFound('No pending tasks in batch');
+      }
+
+      // Verify task belongs to user's company
+      if (task.companyId !== userCompany) {
+        throw notFound('Batch not found');
+      }
+
+      // Transform task to include id field
+      const transformedTask = {
+        ...task,
+        id: task._id?.toString(),
+        _id: task._id?.toString(), // Keep _id for backward compatibility
+      };
+
+      return sendSuccess(reply, { task: transformedTask });
+    } catch (error) {
+      const appError = handleError(error);
+      return sendError(reply, appError);
+    }
+  };
+
   const getTaskById = async (
     request: FastifyRequest<{ Params: { id: string } }>,
     reply: FastifyReply
@@ -457,8 +495,8 @@ export const createTaskHandlers = (deps: TaskHandlerDeps) => {
   return {
     listTasks,
     getTaskById,
+    getNextPendingTask,
     updateTask,
-    // New handlers
     getChatTasks,
     getBroadcastTasks,
     getMailcastTasks,

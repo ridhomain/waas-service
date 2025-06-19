@@ -14,6 +14,10 @@ const TaskParamsSchema = z.object({
   id: z.string().min(1, 'Task ID is required'),
 });
 
+const BatchIdParamsSchema = z.object({
+  batchId: z.string().min(1, 'Batch ID is required'),
+});
+
 const taskRoutes: FastifyPluginAsync = async (fastify) => {
   const handlers = createTaskHandlers({
     taskRepository: fastify.taskRepository,
@@ -77,6 +81,11 @@ const taskRoutes: FastifyPluginAsync = async (fastify) => {
   // GET /tasks/stats - Get task statistics
   fastify.get('/tasks/stats', {
     handler: handlers.getTaskStats,
+  });
+
+  fastify.get('/tasks/next-pending/:batchId', {
+    preHandler: [fastify.zodValidate({ params: BatchIdParamsSchema })],
+    handler: handlers.getNextPendingTask,
   });
 };
 

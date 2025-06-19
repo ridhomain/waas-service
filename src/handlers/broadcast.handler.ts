@@ -12,7 +12,7 @@ import {
   CancelBroadcastInput,
   BroadcastStatusInput,
 } from '../schemas/zod-schemas';
-import { JetStreamClient, StringCodec, headers } from 'nats';
+import { JetStreamClient, StringCodec } from 'nats';
 import { TaskAgent } from '../models/task';
 import {
   BroadcastStatus,
@@ -105,7 +105,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
 
       // Store broadcast state in KV
       const kv = await js.views.kv('broadcast_state');
-      await kv.put(`${agentId}.${batchId}`, sc.encode(JSON.stringify(broadcastState))); // Changed from _ to .
+      await kv.put(`${agentId}.${batchId}`, sc.encode(JSON.stringify(broadcastState)));
 
       // Create tasks in MongoDB
       const tasksToCreate = contacts.map((contact) =>
@@ -127,38 +127,7 @@ export const createBroadcastHandlers = (deps: BroadcastHandlerDeps) => {
         )
       );
 
-      const taskIds = await taskRepository.createMany(tasksToCreate);
-
-      // Publish all tasks to stream
-      const subject = `v1.broadcasts.${agentId}`;
-      const h = headers();
-      h.append('Batch-Id', batchId);
-      h.append('Agent-Id', agentId);
-      h.append('Company', userCompany);
-
-      for (let i = 0; i < taskIds.length; i++) {
-        await js.publish(
-          subject,
-          sc.encode(
-            JSON.stringify({
-              taskId: taskIds[i],
-              batchId,
-              phoneNumber: contacts[i].phone_number,
-              message,
-              options: options || {},
-              variables: variables || {},
-              label,
-              taskAgent,
-              contact: {
-                phone: contacts[i].phone_number,
-              },
-            })
-          ),
-          {
-            headers: h,
-          }
-        );
-      }
+      await taskRepository.createMany(tasksToCreate);
 
       // Schedule the broadcast start
       const jobData = {

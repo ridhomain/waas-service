@@ -317,6 +317,29 @@ export const createTaskRepository = (db: Db) => {
     };
   };
 
+  const findNextPendingByBatch = async (batchId: string): Promise<Task | null> => {
+    // Find one pending task from the batch and atomically update it to PROCESSING
+    // This prevents race conditions when multiple workers try to get tasks
+    const result = await collection.findOneAndUpdate(
+      {
+        batchId,
+        status: 'PENDING',
+      },
+      {
+        $set: {
+          status: 'PROCESSING',
+          updatedAt: new Date(),
+        },
+      },
+      {
+        returnDocument: 'after',
+        sort: { createdAt: 1 },
+      }
+    );
+
+    return result || null;
+  };
+
   return {
     create,
     createMany,
@@ -331,5 +354,6 @@ export const createTaskRepository = (db: Db) => {
     findBroadcastTasks,
     findMailcastTasks,
     getTaskStats,
+    findNextPendingByBatch,
   };
 };

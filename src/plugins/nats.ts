@@ -12,11 +12,29 @@ import {
   KV,
 } from 'nats';
 
+function parseNatsUrl(natsUrl: string) {
+  try {
+    const url = new URL(natsUrl);
+
+    return {
+      servers: `${url.protocol}//${url.host}`,
+      user: url.username || undefined,
+      pass: url.password || undefined,
+      host: url.hostname,
+      port: url.port ? parseInt(url.port) : 4222,
+    };
+  } catch (error: any) {
+    throw new Error(error);
+  }
+}
+
 const natsPlugin: FastifyPluginAsync = async (fastify) => {
+  const natsConfig = parseNatsUrl(fastify.config.NATS_URL);
+
   const nc = await connect({
     servers: fastify.config.NATS_URL,
-    user: 'admin',
-    pass: 'admin',
+    user: natsConfig.user,
+    pass: natsConfig.pass,
     name: `daisi-whatsapp-service-${process.pid}`,
     reconnect: true,
     maxReconnectAttempts: 5,

@@ -1,4 +1,3 @@
-// src/plugins/task-consumer.ts (clean version)
 import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import { StringCodec, AckPolicy, DeliverPolicy, ReplayPolicy, JsMsg, ConsumerConfig } from 'nats';
@@ -55,13 +54,14 @@ const taskConsumerPlugin: FastifyPluginAsync = async (fastify) => {
 
     try {
       const info = await fastify.jsm.streams.info(streamName);
-      fastify.log.info('[TaskConsumer] Connected to task updates stream', {
+      fastify.log.info(`[TaskConsumer] Connected to task updates stream`, {
+        name: streamName,
         messages: info.state.messages,
         bytes: info.state.bytes,
         consumer_count: info.state.consumer_count,
       });
-    } catch (err) {
-      fastify.log.error({ err }, '[TaskConsumer] Task updates stream not found');
+    } catch (err: any) {
+      fastify.log.error({ err }, `[TaskConsumer] Task updates stream not found`);
       throw new Error('task_updates_stream not found - check NATS plugin initialization');
     }
   };
@@ -150,101 +150,44 @@ const taskConsumerPlugin: FastifyPluginAsync = async (fastify) => {
 
   // Process single message
   const processMessage = async (msg: JsMsg) => {
-    const data = JSON.parse(sc.decode(msg.data)) as TaskUpdateEvent;
+    try {
+      const data = JSON.parse(sc.decode(msg.data)) as TaskUpdateEvent;
 
-    // Add to buffer for batch processing
-    updateBuffer.set(data.taskId, data);
+      // Add to buffer for batch processing
+      updateBuffer.set(data.taskId, data);
 
-    // Process batch if size threshold reached
-    if (updateBuffer.size >= batchSize) {
-      await processBatch();
-    } else {
-      // Set timer for time-based batching
-      if (!batchTimer) {
-        batchTimer = setTimeout(() => {
-          processBatch().catch((err) => {
-            fastify.log.error({ err }, '[TaskConsumer] Batch processing failed');
-          });
-        }, batchTimeout);
-      }
-    }
-  };
-
-  // Main consumer loop - using consume() for queue groups
-  const consume = async () => {
-    isRunning = true;
-    const consumer = await fastify.js.consumers.get('task_updates_stream', 'task-update-processor');
-
-    fastify.log.info('[TaskConsumer] Started consuming messages');
-
-    // Use consume() instead of subscribe() for better queue group support
-    const messages = await consumer.consume({
-      max_messages: 100, // Process up to 100 messages per batch
-      expires: 30000, // 30 second timeout
-      idle_heartbeat: 5000, // Send heartbeat every 5 seconds when idle
-    });
-
-    // Process messages
-    for await (const msg of messages) {
-      if (!isRunning || isPaused) {
-        msg.nak();
-        break;
-      }
-
-      try {
-        await processMessage(msg);
-        msg.ack();
-      } catch (err) {
-        fastify.log.error(
-          { err, subject: msg.subject },
-          '[TaskConsumer] Failed to process message'
-        );
-
-        // Simple retry logic - max 3 attempts total (initial + 2 retries)
-        if (msg.info.redeliveryCount < 2) {
-          msg.nak(); // Retry
-        } else {
-          // After max retries, just log and acknowledge to prevent blocking
-          fastify.log.error(
-            {
-              taskId: JSON.parse(sc.decode(msg.data)).taskId,
-              redeliveryCount: msg.info.redeliveryCount,
-              error: err,
-            },
-            '[TaskConsumer] Task update failed after max retries'
-          );
-          msg.ack(); // Acknowledge to move on
+      // Process batch if size threshold reached
+      if (updateBuffer.size >= batchSize) {
+        await processBatch();
+      } else {
+        // Set timer for time-based batching
+        if (!batchTimer) {
+          batchTimer = setTimeout(() => {
+            processBatch().catch((err) => {
+              fastify.log.error({ err }, '[TaskConsumer] Batch processing failed');
+            });
+          }, batchTimeout);
         }
       }
-    }
-
-    // If still running, continue consuming
-    if (isRunning && !isPaused) {
-      // Small delay before next consume cycle
-      setTimeout(() => {
-        consume().catch((err) => {
-          fastify.log.error({ err }, '[TaskConsumer] Consumer loop error, restarting...');
-          if (isRunning) {
-            setTimeout(() => consume(), 5000); // Retry after 5 seconds
-          }
-        });
-      }, 100);
+    } catch (err) {
+      fastify.log.error({ err, subject: msg.subject }, '[TaskConsumer] Failed to parse message');
+      throw err;
     }
   };
 
-  // Start consumer
-  const start = async () => {
-    // Verify stream exists (created by NATS plugin)
-    await verifyTaskUpdateStream();
-
-    // Create durable consumer
+  // Create or get consumer
+  const ensureConsumer = async () => {
     const consumerName = 'task-update-consumer';
     const streamName = 'task_updates_stream';
 
     try {
       // Check if consumer exists
-      await fastify.jsm.consumers.info(streamName, consumerName);
-      fastify.log.info(`[TaskConsumer] Consumer ${consumerName} already exists`);
+      const consumerInfo = await fastify.jsm.consumers.info(streamName, consumerName);
+      fastify.log.info(`[TaskConsumer] Consumer ${consumerName} already exists`, {
+        pending: consumerInfo.num_pending,
+        delivered: consumerInfo.delivered.stream_seq,
+      });
+      return consumerName;
     } catch (err: any) {
       if (err.message.includes('consumer not found')) {
         // Create consumer with queue group for load balancing across replicas
@@ -254,7 +197,7 @@ const taskConsumerPlugin: FastifyPluginAsync = async (fastify) => {
           deliver_policy: DeliverPolicy.All,
           replay_policy: ReplayPolicy.Instant,
           max_deliver: 3, // Max 3 attempts (initial + 2 retries)
-          ack_wait: 30_000_000_000, // 30 seconds
+          ack_wait: 30_000_000_000, // 30 seconds in nanoseconds
           max_ack_pending: 1000,
           filter_subjects: ['v1.tasks.updates.*'],
           // Queue group ensures messages are distributed across replicas
@@ -263,14 +206,118 @@ const taskConsumerPlugin: FastifyPluginAsync = async (fastify) => {
 
         await fastify.jsm.consumers.add(streamName, consumerConfig);
         fastify.log.info(`[TaskConsumer] Created consumer ${consumerName}`);
+        return consumerName;
+      } else {
+        throw err;
       }
     }
+  };
 
-    // Start consuming in background
-    consume().catch((err) => {
-      fastify.log.error({ err }, '[TaskConsumer] Consumer loop failed');
+  // Main consumer loop using pull subscription
+  const consume = async () => {
+    try {
+      isRunning = true;
+
+      // Ensure consumer exists
+      const consumerName = await ensureConsumer();
+      const consumer = await fastify.js.consumers.get('task_updates_stream', consumerName);
+
+      fastify.log.info('[TaskConsumer] Started consuming messages');
+
+      while (isRunning && !isPaused) {
+        try {
+          // Fetch messages in batches
+          const messages = await consumer.fetch({
+            max_messages: 50,
+            expires: 10000,
+          });
+
+          let messageCount = 0;
+
+          // Process messages
+          for await (const msg of messages) {
+            if (!isRunning || isPaused) {
+              msg.nak();
+              break;
+            }
+
+            try {
+              await processMessage(msg);
+              msg.ack();
+              messageCount++;
+            } catch (err) {
+              fastify.log.error(
+                { err, subject: msg.subject },
+                '[TaskConsumer] Failed to process message'
+              );
+
+              // Simple retry logic - max 3 attempts total (initial + 2 retries)
+              if (msg.info.deliveryCount < 2) {
+                msg.nak(); // Retry
+              } else {
+                // After max retries, just log and acknowledge to prevent blocking
+                fastify.log.error(
+                  {
+                    redeliveryCount: msg.info.deliveryCount,
+                    error: err,
+                  },
+                  '[TaskConsumer] Task update failed after max retries'
+                );
+                msg.ack(); // Acknowledge to move on
+              }
+            }
+          }
+
+          if (messageCount > 0) {
+            fastify.log.debug(`[TaskConsumer] Processed ${messageCount} messages`);
+          }
+
+          // Small delay before next fetch if no messages
+          if (messageCount === 0) {
+            await sleep(1000);
+          }
+        } catch (err: any) {
+          if (err.message.includes('no messages')) {
+            // No messages available, continue with delay
+            await sleep(5000);
+            continue;
+          } else {
+            fastify.log.error({ err }, '[TaskConsumer] Error fetching messages');
+            await sleep(5000); // Wait before retry
+          }
+        }
+      }
+    } catch (err) {
+      fastify.log.error({ err }, '[TaskConsumer] Consumer loop error');
       isRunning = false;
-    });
+
+      // Restart after delay if not shutting down
+      if (!isPaused) {
+        setTimeout(() => {
+          if (!isRunning) {
+            consume().catch((restartErr) => {
+              fastify.log.error({ err: restartErr }, '[TaskConsumer] Failed to restart consumer');
+            });
+          }
+        }, 10000); // Wait 10 seconds before restart
+      }
+    }
+  };
+
+  // Start consumer
+  const start = async () => {
+    try {
+      // Verify stream exists (created by NATS plugin)
+      await verifyTaskUpdateStream();
+
+      // Start consuming in background
+      consume().catch((err) => {
+        fastify.log.error({ err }, '[TaskConsumer] Initial consumer start failed');
+      });
+    } catch (err) {
+      fastify.log.error({ err }, '[TaskConsumer] Failed to start consumer');
+      throw err;
+    }
   };
 
   // Start the consumer
@@ -312,6 +359,9 @@ const taskConsumerPlugin: FastifyPluginAsync = async (fastify) => {
     fastify.log.info('[TaskConsumer] Shutdown complete');
   });
 };
+
+// Helper function
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default fp(taskConsumerPlugin, {
   name: 'task-consumer',
